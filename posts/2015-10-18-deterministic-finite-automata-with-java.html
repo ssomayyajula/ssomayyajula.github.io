@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <title>Deterministic finite automata with Java</title>
+        <link rel="stylesheet" type="text/css" href="../css/default.css" />
+        <link rel="stylesheet" type="text/css" href="../css/syntax.css" />
+        <link rel="shortcut icon" type="image/png" href="../images/haskell-logo.png" />
+        <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body>
+        <div id="header">
+            <div id="logo">
+                <a href="../">Siva Somayyajula</a>
+            </div>
+            <div id="navigation">
+                <a href="../files/resume.pdf">résumé</a>
+                <a href="mailto:sks266@cornell.edu">email</a>
+                <a href="https://github.com/ssomayyajula/">github</a>
+                <a href="https://www.linkedin.com/in/sivasomayyajula">linkedin</a>
+            </div>
+        </div>
+        <div id="content">
+            <h1>Deterministic finite automata with Java</h1>
+<div class="info">
+    Posted on October 18, 2015
+</div>
+<p>If you didn’t sit in on <a href="http://www.cs.cornell.edu/jeh/">Prof. Hopcroft</a>’s lecture on deterministic finite automata (DFA) last Friday in <a href="http://www.cs.cornell.edu/courses/cs2800/2015fa/">CS 2800</a>, here’s a small crash course: a DFA is a 5-tuple (Q, Σ, δ, q₀, F) where Q is a set of states, Σ is a formal alphabet, δ: Q × Σ → Q is a transition function, q₀ is a start state in Q, and F is a set of accept states in Q. Given this information, we can figure out if a given automata “accepts” an input string built from the Σ by taking the first character in the string, applying the transition function on it and the initial state, and retrieving the returned state. Then, we take the next character and apply the transition function again on it and the aforementioned returned state, and so on. Thus, we transition from state to state until we reach the end of the string. If the final transitioned state is in the set of accept states, then the automata accepts this string. Otherwise, it rejects it. We call the set of strings accepted by an automaton its <i>language</i>.</p>
+<p>Now, let’s try an example taken from <a href="https://en.wikipedia.org/wiki/Deterministic_finite_automaton#Example">Wikipedia</a>: construct a DFA whose language are strings from the binary alphabet that contain an even number of 0s. Our automata will be M = (Q, Σ, δ, q₀, F) where Q = {S₁, S₂}, Σ = {0, 1}, q₀ = S₁, F = {S₁}, and δ is defined as follows:</p>
+<p>δ: Q × Σ → Q <br /> δ: (0, S₁) ↦ S₂ <br /> δ: (0, S₂) ↦ S₁ <br /> δ: (1, S₁) ↦ S₁ <br /> δ: (1, S₂) ↦ S₂ <br /></p>
+<p>The following state diagram should clear up any confusion. Note that we start execution on the start state, and run through each character, going from state to state depending on which edge corresponding to the given character we pass, and when we get to the end of the string, the automaton accepts it if we’re on a double-circled (accept) state. Try it out on strings like “0”, “01”, “0010100”, etc.</p>
+<p><img src="../images/2015-10-18-deterministic-finite-automata-with-java/DFAExample.png" style="float: center; margin: 10px;" /></p>
+<p>We can implement such a system in Java by creating an abstract class representing an arbitrary automaton that holds an initial state, transition function, and set of final states that exposes an accepts function that iterates over an input string and transitions from state to state, eventually returning whether the final state exists in the set of accept states.</p>
+<div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="co">/**</span>
+<span class="co"> * Represents a deterministic finite automaton (DFA)</span>
+<span class="co"> * over a finite set of states Q and an alphabet Σ.</span>
+<span class="co"> *</span>
+<span class="co"> * </span><span class="kw">@author </span><span class="co">Siva Somayyajula (sks266@cornell.edu)</span>
+<span class="co"> */</span>
+<span class="kw">public</span> <span class="kw">abstract</span> <span class="kw">class</span> DFA&lt;Q, Σ&gt; {
+    <span class="kw">private</span> <span class="dt">final</span> Q q0;
+    <span class="kw">private</span> <span class="dt">final</span> Set&lt;Q&gt; F;
+    <span class="co">/**</span>
+<span class="co">     * Constructs a DFA given the following</span>
+<span class="co">     * </span><span class="kw">@param q0 </span><span class="co">a start state</span>
+<span class="co">     * </span><span class="kw">@param F </span><span class="co">a set of final/accept states</span>
+<span class="co">     * */</span>
+    <span class="fu">@SafeVarargs</span> <span class="kw">protected</span> <span class="fu">DFA</span>(Q q0, Q<span class="kw">... </span>F) {
+        <span class="kw">this</span>.<span class="fu">q0</span> = q0;
+        <span class="kw">this</span>.<span class="fu">F</span> = <span class="kw">new</span> HashSet&lt;&gt;(Arrays.<span class="fu">asList</span>(F));
+    }
+    <span class="co">/**</span>
+<span class="co">     * A transition function Q × Σ → Q</span>
+<span class="co">     * </span><span class="kw">@param q </span><span class="co">a state</span>
+<span class="co">     * </span><span class="kw">@param σ </span><span class="co">a symbol from an input string</span>
+<span class="co">     * */</span>
+    <span class="kw">protected</span> <span class="kw">abstract</span> Q δ(Q q, Σ σ);
+    <span class="co">/**</span>
+<span class="co">     * Determines whether or not the automaton accepts:</span>
+<span class="co">     * </span><span class="kw">@param input </span><span class="co">the given input string</span>
+<span class="co">     * */</span>
+    <span class="kw">public</span> <span class="dt">final</span> <span class="dt">boolean</span> <span class="fu">accepts</span>(Iterable&lt;Σ&gt; input) {
+        Q q = q0;
+        <span class="kw">for</span> (Σ σ : input)
+            q = δ(q, σ);
+        <span class="kw">return</span> F.<span class="fu">contains</span>(q);
+    }
+}</code></pre></div>
+<p>Before making the “Even Zeroes” automaton, we first need to define an enumeration representing the binary alphabet.</p>
+<div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="co">/**</span>
+<span class="co"> * Represents the binary alphabet of 0s and 1s.</span>
+<span class="co"> *</span>
+<span class="co"> * </span><span class="kw">@author </span><span class="co">Siva Somayyajula (sks266@cornell.edu)</span>
+<span class="co"> */</span>
+<span class="kw">public</span> <span class="kw">enum</span> BinarySymbol {
+    Z, O <span class="co">// (Z)ero or (O)ne</span>
+}</code></pre></div>
+<p>Finally, we can implement the automaton. It will extend DFA and implement the transition function while having an internal set of states specific to this machine.</p>
+<div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="co">/**</span>
+<span class="co"> * A DFA that only accepts strings from the binary</span>
+<span class="co"> * alphabet that contain an even number of 0s.</span>
+<span class="co"> *</span>
+<span class="co"> * </span><span class="kw">@author </span><span class="co">Siva Somayyajula (sks266@cornell.edu)</span>
+<span class="co"> */</span>
+<span class="kw">public</span> <span class="kw">class</span> EvenZeroesDFA <span class="kw">extends</span>
+        DFA&lt;EvenZeroesDFA.<span class="fu">S</span>, BinarySymbol&gt; {
+    <span class="kw">enum</span> S {
+        S1, S2
+    }
+    <span class="kw">public</span> <span class="fu">EvenZeroesDFA</span>() {
+        <span class="kw">super</span>(S.<span class="fu">S1</span>, S.<span class="fu">S1</span>);
+    }
+    <span class="fu">@Override</span>
+    <span class="kw">protected</span> S δ(S q, BinarySymbol σ) {
+        <span class="kw">switch</span> (σ) {
+            <span class="kw">case</span> Z:
+                <span class="kw">switch</span> (q) {
+                    <span class="kw">case</span> S1:
+                        <span class="kw">return</span> S.<span class="fu">S2</span>;
+                    <span class="kw">default</span>:
+                        <span class="kw">return</span> S.<span class="fu">S1</span>;
+                }
+            <span class="kw">case</span> O:
+                <span class="kw">switch</span> (q) {
+                    <span class="kw">case</span> S1:
+                        <span class="kw">return</span> S.<span class="fu">S1</span>;
+                    <span class="kw">default</span>:
+                        <span class="kw">return</span> S.<span class="fu">S2</span>;
+                }
+        }
+        <span class="kw">throw</span> <span class="kw">new</span> RuntimeException(<span class="st">&quot;This shouldn't happen&quot;</span>);
+    }
+}</code></pre></div>
+<p>Here’s a JUnit Theory that runs it against a slew of binary strings of random 0-parity.</p>
+<div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="kw">import org.junit.experimental.theories.DataPoints;</span>
+<span class="kw">import org.junit.experimental.theories.Theories;</span>
+<span class="kw">import org.junit.experimental.theories.Theory;</span>
+<span class="kw">import org.junit.runner.RunWith;</span>
+
+<span class="kw">import java.util.LinkedList;</span>
+<span class="kw">import java.util.List;</span>
+<span class="kw">import java.util.Random;</span>
+
+<span class="kw">import static org.junit.Assert.assertTrue;</span>
+
+<span class="co">/**</span>
+<span class="co"> * Tests the validity of EvenZeroesDFA</span>
+<span class="co"> *</span>
+<span class="co"> * </span><span class="kw">@author </span><span class="co">Siva Somayyajula (sks266@cornell.edu)</span>
+<span class="co"> */</span>
+<span class="fu">@RunWith</span>(Theories.<span class="fu">class</span>)
+<span class="kw">public</span> <span class="kw">class</span> EvenZeroesDFATest {
+    <span class="kw">private</span> <span class="dt">final</span> EvenZeroesDFA even0 = <span class="kw">new</span> <span class="fu">EvenZeroesDFA</span>();
+    <span class="fu">@DataPoints</span>
+    <span class="kw">public</span> <span class="dt">static</span> Iterable&lt;BinarySymbol&gt;[] <span class="fu">strings</span>() {
+        Random r = <span class="kw">new</span> Random();
+        Iterable&lt;BinarySymbol&gt;[] strings =
+                <span class="kw">new</span> Iterable[r.<span class="fu">nextInt</span>(<span class="dv">1000</span>) + <span class="dv">1</span>];
+        <span class="kw">for</span> (<span class="dt">int</span> i = <span class="dv">0</span>; i &lt; strings.<span class="fu">length</span>; i++) {
+            List&lt;BinarySymbol&gt; string = <span class="kw">new</span> LinkedList&lt;&gt;();
+            <span class="dt">int</span> l = r.<span class="fu">nextInt</span>(<span class="dv">1000</span>);
+            <span class="kw">for</span> (<span class="dt">int</span> j = <span class="dv">0</span>; j &lt; l; j++)
+                string.<span class="fu">add</span>(r.<span class="fu">nextBoolean</span>() ?
+                        BinarySymbol.<span class="fu">O</span> :
+                        BinarySymbol.<span class="fu">Z</span>);
+            strings[i] = string;
+        }
+        <span class="kw">return</span> strings;
+    }
+    <span class="dt">boolean</span> <span class="fu">isEven0</span>(Iterable&lt;BinarySymbol&gt; input) {
+        <span class="co">// Independently determines whether</span>
+        <span class="co">// input should be accepted</span>
+        <span class="dt">int</span> count = <span class="dv">0</span>;
+        <span class="kw">for</span> (BinarySymbol σ : input) {
+            <span class="kw">if</span> (σ == BinarySymbol.<span class="fu">Z</span>)
+                count++;
+        }
+        <span class="kw">return</span> count % <span class="dv">2</span> == <span class="dv">0</span>;
+    }
+    <span class="fu">@Theory</span>
+    <span class="kw">public</span> <span class="dt">void</span> <span class="fu">test</span>(Iterable&lt;BinarySymbol&gt; input)
+            <span class="kw">throws</span> Exception {
+        <span class="fu">assertTrue</span>(<span class="fu">isEven0</span>(input) == even0.<span class="fu">accepts</span>(input));
+    }
+}</code></pre></div>
+<p>If you run this test, you should get a green “All tests passed” or something like that. Basically, it works. That was fun.</p>
+<p>But perhaps object-oriented programming isn’t your style? For those who want to take advantage of Java 8’s lambda expressions, the <a href="https://github.com/sivawashere/dfa">source code for this project on github</a> has a functional programming version of the above. The DFA class becomes concrete and instead expects a transition function as an argument to its constructor, so creating new machines is as simple as instantiating different DFAs. As a result, the “Even Zeroes” automaton and binary alphabet are shoehorned into a JUnit test for simplicity. Anyways, that’s enough for now.</p>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    /* * * CONFIGURATION VARIABLES * * */
+    var disqus_shortname = 'ssomayyajula';
+    
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+
+        </div>
+        <div id="footer">
+            Site proudly generated by
+            <a href="http://jaspervdj.be/hakyll">Hakyll</a>
+        </div>
+    </body>
+</html>

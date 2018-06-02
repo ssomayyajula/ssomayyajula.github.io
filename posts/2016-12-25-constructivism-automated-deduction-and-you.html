@@ -1,0 +1,359 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <title>Constructivism, automated deduction, and you</title>
+        <link rel="stylesheet" type="text/css" href="../css/default.css" />
+        <link rel="stylesheet" type="text/css" href="../css/syntax.css" />
+        <link rel="shortcut icon" type="image/png" href="../images/haskell-logo.png" />
+        <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body>
+        <div id="header">
+            <div id="logo">
+                <a href="../">Siva Somayyajula</a>
+            </div>
+            <div id="navigation">
+                <a href="../files/resume.pdf">résumé</a>
+                <a href="mailto:sks266@cornell.edu">email</a>
+                <a href="https://github.com/ssomayyajula/">github</a>
+                <a href="https://www.linkedin.com/in/sivasomayyajula">linkedin</a>
+            </div>
+        </div>
+        <div id="content">
+            <h1>Constructivism, automated deduction, and you</h1>
+<div class="info">
+    Posted on December 25, 2016
+</div>
+<p>Finally back at it again after a long while. In this post, we’ll briefly discuss constructive mathematics and how its application to automated deduction allows us to develop fast and correct programs in Idris, a dependently-typed language inspired by Haskell. This will be the first in a series of posts that’ll help me get my obsession with logic out of my system. First, some theory.</p>
+<h2 id="constructivism">Constructivism</h2>
+<p>Constructivism is a school of mathematical thought that says that proofs of claims asserting the existence of a mathematical object must explicitly construct it. While many proofs do exactly this, constructivism automatically discounts large classes of proofs that rely on reasoning like “inexistence is invalid implies existence.” While this seems inherently limiting, it turns out that constructive logic is as powerful and even subsumes classical logic. However, the killer application of constructive proofs is that we can extract “computational content” from them (read: algorithms and programs). This of course excites many computer scientists, like me and hopefully you.</p>
+<p>To figure out how to do that, we have to get a little less abstract. The logic we will be dealing with is Heyting arithmetic (HA): constructive first-order logic with equality over the natural numbers. This means we have the usual logical connectives like conjunction, implication, etc. but we also have propositional equality and universal/existential quantification over the natural numbers. Furthermore, Kleene’s axiomatization of HA characterizes operations like addition and multiplication, which we will discuss later on. We will also assume some a priori choice of proof system for HA—it doesn’t matter which one, since we’re studying its metatheory.</p>
+<p>To capture the constructive and computational character of HA, Kleene introduced a notion of <em>realizability</em> in which logical formulae may be <em>realized</em> by mathematical objects. We’ll look at a modified version of his original definition below and see how that relates to constructive thought. In terms of nomenclature, <span class="math inline">\(e_1\)</span>, <span class="math inline">\(e_2\)</span>, etc. are <em>terms</em> in HA (that is, expressions that resolve to natural numbers), and <span class="math inline">\(n\)</span>, <span class="math inline">\(m\)</span>, etc. are natural numbers.</p>
+<ul>
+<li><span class="math inline">\(n\)</span> realizes <span class="math inline">\(e_1 = e_2\iff\vDash e_1 = e_2\)</span>. False equalities are not realizable.</li>
+<li><span class="math inline">\((n, m)\)</span> realizes <span class="math inline">\(P\land Q\iff n\)</span> realizes <span class="math inline">\(P\)</span> and <span class="math inline">\(m\)</span> realizes <span class="math inline">\(Q\)</span></li>
+<li><span class="math inline">\((n, t)\)</span> realizes <span class="math inline">\(P\lor Q\iff t = 0\implies n\)</span> realizes <span class="math inline">\(P\)</span> else <span class="math inline">\(n\)</span> realizes <span class="math inline">\(Q\)</span></li>
+<li><span class="math inline">\(f:\mathbb{N}\to\mathbb{N}\)</span> realizes <span class="math inline">\(P\implies Q\iff f\)</span> accepts realizers for <span class="math inline">\(P\)</span> and returns a realizer for <span class="math inline">\(Q\)</span></li>
+<li><span class="math inline">\((n, m)\)</span> realizes <span class="math inline">\(\exists x.~P(x)\iff m\)</span> realizes <span class="math inline">\(P(n)\)</span></li>
+<li><span class="math inline">\(f: \mathbb{N}\to\mathbb{N}\)</span> realizes <span class="math inline">\(\forall x.~P(x)\iff\forall x\in\mathbb{N},~f(x)\)</span> realizes <span class="math inline">\(P(x)\)</span></li>
+</ul>
+<p>So, how is this constructive? Consider that <span class="math inline">\((2, 1)\)</span> realizes <span class="math inline">\(\exists x. 2 \cdot x = 4\)</span>. To prove the existence of such an <span class="math inline">\(x\)</span>, we had to explicitly give <span class="math inline">\(x = 2\)</span>, which is precisely what constructivism is all about. The computational content is a bit more subtle—it’ll only show up in more complicated examples. The main thing to understand is that <strong>realizers are algorithms</strong>, at least in the mathematical sense, because they demonstrate how to compute evidence for the truth of a formula.</p>
+<p>Regardless, there seems to be a fundamental disconnect between propositions and proofs here: it seems like we can only realize valid formulae, so what happens to proofs? Since HA is sound—that is, all provable proposition are valid—and only valid propositions are realizable, only provable propositions are realizable! This means that, in your proof system of choice, you may identify proofs of propositions with their realizers. Now, we can make the transition from mathematical realizability to the computational kind.</p>
+<h2 id="programming-logic">Programming Logic</h2>
+<p>In a <a href="http://ssomayyajula.github.io/posts/2015-12-05-exploring-the-curry-howard-correspondence.html">previous post</a>, I explained the duality between programming languages and logics, but you don’t have to read it to understand the rest of this post. The gist is <strong>propositions are types and proofs are programs</strong>. We can go a step further and extend our identification of proofs and realizers to programs. In other words, programs are simultaneously proofs of propositions and realizers that compute evidence for the truth of said propositions. This allows us to encode any HA proposition as an Idris type and prove it by giving a program (function) of that type. That program will then allows us to compute some interesting stuff. Let’s figure out the specific type encoding.</p>
+<p>First, fix a set of base types <span class="math inline">\(B\)</span> such that every atomic proposition is identified with a type in <span class="math inline">\(B\)</span>. Assume there also exists an empty type <code>Void</code> which has no inhabitants. Then, the following function translates propositions constructed by logical connectives into types.</p>
+<span class="math display">\[\begin{align*}
+[\![P\land Q]\!]&amp;\triangleq ([\![P]\!], [\![Q]\!])\\
+[\![P\lor Q]\!]&amp;\triangleq \texttt{Either}~[\![P]\!]~[\![Q]\!]\\
+[\![P\implies Q]\!]&amp;\triangleq [\![P]\!]~\texttt{-&gt;}~[\![Q]\!]\\
+[\![\lnot P]\!]&amp;\triangleq [\![P]\!]~\texttt{-&gt; Void}
+\end{align*}\]</span>
+<p>Propositional equality and quantification are a bit more difficult since they introduce terms (values) into types and thus require <em>dependent types</em>. Equality is encoded as an  type on values/types whose canonical inhabitant is the proof of reflexivity. Furthermore, universal quantification is encoded as the dependent function type whose codomain varies with the type of the input, since <span class="math inline">\(P(x)\)</span> varies with <span class="math inline">\(x\)</span>. Secondly, existential quantification is encoded as the dependent pair type whose second component type varies with the type of the first component, since <span class="math inline">\(P(x)\)</span> varies with the specific choice of <span class="math inline">\(x\)</span>. That leads us to the following translation.</p>
+<span class="math display">\[\begin{align*}
+[\![e_1 = e_2]\!]&amp;\triangleq e_1~\texttt{=}~e_2\\
+[\![\forall x.~P(x)]\!]&amp;\triangleq \texttt{(x : Nat) -&gt;}~[\![P(x)]\!]\\
+[\![\exists x.~P(x)]\!]&amp;\triangleq \texttt{(x : Nat ** }~[\![P(x)]\!]\texttt{)}
+\end{align*}\]</span>
+<p>Notice that Kleene’s interpretation of realizability is implictly given by this encoding at the value/term level; for example, the fact that <code>Refl</code> (the compiler-understandable proof of reflexivity) inhabits <code>1 = 1</code> is dual to 1 realizing <span class="math inline">\(1 = 1\)</span>, and the fact that <code>\(x, y) =&gt; x</code> inhabits <code>(a, b) -&gt; a</code> is dual to <span class="math inline">\((n, m)\)</span> realizing <span class="math inline">\(P\land Q\implies P\)</span>. In fact, we can give a direct correspondence between realizers for HA and Idris terms.</p>
+<style>
+td{
+ text-align:center;
+ vertical-align:middle;
+}
+</style>
+<table align="center" border="1">
+<tr>
+<th>
+Formula
+</th>
+<th>
+Realizer
+</th>
+<th>
+Idris Term
+</th>
+</tr>
+<tr>
+<td>
+<span class="math inline">\(e_1 = e_2\)</span>
+</td>
+<td>
+<span class="math inline">\(n\)</span>
+</td>
+<td>
+<code>Refl</code>
+</td>
+</tr>
+<tr>
+<td>
+<span class="math inline">\(P\land Q\)</span>
+</td>
+<td>
+<span class="math inline">\((n, m)\)</span>
+</td>
+<td>
+<code>(n, m)</code>
+</td>
+</tr>
+<tr>
+<td>
+<span class="math inline">\(P\lor Q\)</span>
+</td>
+<td>
+<span class="math inline">\((n, 0)\)</span> or <span class="math inline">\((n, \_)\)</span>
+</td>
+<td>
+<code>Left n</code> or <code>Right n</code>
+</td>
+</tr>
+<tr>
+<td>
+<span class="math inline">\(P\implies Q\)</span>
+</td>
+<td>
+<span class="math inline">\(f:\mathbb{N}\to\mathbb{N}\)</span>
+</td>
+<td>
+<code>f : Nat -&gt; Nat</code>
+</td>
+</tr>
+<tr>
+<td>
+<span class="math inline">\(\exists x.~P(x)\)</span>
+</td>
+<td>
+<span class="math inline">\((n, m)\)</span>
+</td>
+<td>
+<code>(n ** m)</code>
+</td>
+</tr>
+<tr>
+<td>
+<span class="math inline">\(\forall x.~P(x)\)</span>
+</td>
+<td>
+<span class="math inline">\(f:\mathbb{N}\to\mathbb{N}\)</span>
+</td>
+<td>
+<code>f : (x : Nat) -&gt; P(x)</code>
+</td>
+</tr>
+</table>
+<p>The big takeaway from this section is that the idea of extracting algorithms from proofs is implicit in our computational system, since proofs are programs. The above might also seem like abstract nonsense, so let’s see how this works out in practice by encoding HA in Idris.</p>
+<h2 id="encoding-heyting-arithmetic">Encoding Heyting Arithmetic</h2>
+<p>Let’s try out Kleene’s axiomatization; Idris actually provides proofs for the more trivial ones, with the following signatures.</p>
+<ol style="list-style-type: decimal">
+<li><p>Injectivity of successor: <span class="math inline">\(\forall x, y.~S(x) = S(y)\implies x = y\)</span></p>
+<div class="sourceCode"><pre class="sourceCode idris"><code class="sourceCode idris"><span class="fu">succInjective</span> <span class="ot">:</span> (x, y <span class="ot">:</span> <span class="dt">Nat</span>) <span class="ot">-&gt;</span> <span class="dt">S</span> x <span class="fu">=</span> <span class="dt">S</span> y <span class="ot">-&gt;</span> x <span class="fu">=</span> y</code></pre></div></li>
+<li><p>Equality is extensional: <span class="math inline">\(\forall x, y.~x = y\implies S(x) = S(y)\)</span></p>
+<div class="sourceCode"><pre class="sourceCode idris"><code class="sourceCode idris"><span class="fu">succEq</span> <span class="ot">:</span> (x, y <span class="ot">:</span> <span class="dt">Nat</span>) <span class="ot">-&gt;</span> x <span class="fu">=</span> y <span class="ot">-&gt;</span> <span class="dt">S</span> x <span class="fu">=</span> <span class="dt">S</span> y</code></pre></div></li>
+<li><p>Zero is the additive identity: <span class="math inline">\(\forall x.~x + 0 = x\)</span></p>
+<div class="sourceCode"><pre class="sourceCode idris"><code class="sourceCode idris"><span class="fu">plusZeroRightNeutral</span> <span class="ot">:</span> (x <span class="ot">:</span> <span class="dt">Nat</span>) <span class="ot">-&gt;</span> x <span class="fu">+</span> <span class="dt">Z</span> <span class="fu">=</span> x</code></pre></div></li>
+<li><p>Zero is the multiplicative annihilator: <span class="math inline">\(\forall x.~x \cdot 0 = 0\)</span></p>
+<div class="sourceCode"><pre class="sourceCode idris"><code class="sourceCode idris"><span class="fu">multZeroRightZero</span> <span class="ot">:</span> (x <span class="ot">:</span> <span class="dt">Nat</span>) <span class="ot">-&gt;</span> x <span class="fu">*</span> <span class="dt">Z</span> <span class="fu">=</span> <span class="dt">Z</span></code></pre></div></li>
+<li><p>Zero is never a successor: <span class="math inline">\(\forall x.~\lnot(S(x) = 0)\)</span></p>
+<div class="sourceCode"><pre class="sourceCode idris"><code class="sourceCode idris"><span class="dt">SIsNotZ</span> <span class="ot">:</span> {x <span class="ot">:</span> <span class="dt">Nat</span>} <span class="ot">-&gt;</span> <span class="dt">S</span> x <span class="fu">=</span> <span class="dt">Z</span> <span class="ot">-&gt;</span> <span class="dt">Void</span></code></pre></div>
+<p>The curly braces around <code>x : Nat</code> still denotes the dependent function type, but it simply allows <code>x</code> to be inferred from context as opposed to being explicitly passed in.</p></li>
+</ol>
+<p>Let’s do one ourselves.</p>
+<ol start="6" style="list-style-type: decimal">
+<li><p>“Transitivity” of equality: <span class="math inline">\(\forall x, y, z.~x = y\implies x = z\implies y = z\)</span></p>
+<div class="sourceCode"><pre class="sourceCode idris"><code class="sourceCode idris"><span class="fu">natEq</span> <span class="ot">:</span> (x, y, z <span class="ot">:</span> <span class="dt">Nat</span>) <span class="ot">-&gt;</span> x <span class="fu">=</span> y <span class="ot">-&gt;</span> x <span class="fu">=</span> z <span class="ot">-&gt;</span> y <span class="fu">=</span> z
+natEq <span class="fu">_</span> <span class="fu">_</span> <span class="fu">_</span> <span class="dt">Refl</span> <span class="dt">Refl</span> <span class="fu">=</span> <span class="dt">Refl</span></code></pre></div>
+<p>Since this is our first sighting of <code>Refl</code> in the wild, let me explain how it works: the assumptions allows the typechecker to infer that <code>x ~ y</code> and <code>x ~ z</code>—that is, they are <em>exactly</em> the same, so one can sort of rewrite the conclusion as <code>x = x</code>, whose proof is simply reflexivity.</p></li>
+</ol>
+<p>Now, for the most profound axiom: the principle of mathematical induction.</p>
+<ol start="7" style="list-style-type: decimal">
+<li><p>Second-order axiom of induction: <span class="math inline">\(\forall P.~P(0)\implies(\forall x.~P(x)\implies P(S(x)))\implies\forall n.~P(n)\)</span>.</p>
+<div class="sourceCode"><pre class="sourceCode idris"><code class="sourceCode idris"><span class="fu">induction</span> <span class="ot">:</span> (<span class="dt">P</span> <span class="ot">:</span> <span class="dt">Nat</span> <span class="ot">-&gt;</span> <span class="dt">Type</span>)
+     <span class="ot">-&gt;</span> <span class="dt">P</span> <span class="dt">Z</span>
+     <span class="ot">-&gt;</span> ((x <span class="ot">:</span> <span class="dt">Nat</span>) <span class="ot">-&gt;</span> <span class="dt">P</span> x <span class="ot">-&gt;</span> <span class="dt">P</span> (<span class="dt">S</span> x))
+     <span class="ot">-&gt;</span> (n <span class="ot">:</span> <span class="dt">Nat</span>) <span class="ot">-&gt;</span> <span class="dt">P</span> n
+<span class="kw">induction</span> <span class="dt">P</span> pz ps n <span class="fu">=</span> <span class="kw">case</span> n <span class="kw">of</span>
+  <span class="dt">Z</span>    <span class="ot">=&gt;</span> pz
+  <span class="dt">S</span> n' <span class="ot">=&gt;</span> ps n' (<span class="kw">induction</span> <span class="dt">P</span> pz ps n')</code></pre></div>
+<p>This is <em>ridiculously</em> insightful: it shows that <strong>induction is dual to recursion</strong> since proving the inductive case requires proofs for all lesser <span class="math inline">\(n\)</span>. We can now use this to prove the last two axioms.</p></li>
+</ol>
+<p>First, we’re going to have to learn how to manipulate propositional type equalities. Idris gives a syntax <code>rewrite [eq : x = y] in [expr]</code> which substitutes the first instance of <code>x</code> with <code>y</code> in the type of <code>expr</code>.</p>
+<ol start="8" style="list-style-type: decimal">
+<li>Successor of the sum: <span class="math inline">\(\forall x, y.~x + S(y) = S(x + y)\)</span>. Since Idris defines addition by recursion on the first argument, we’ll proceed by induction on <span class="math inline">\(x\)</span>.</li>
+</ol>
+<div class="sourceCode"><pre class="sourceCode idris"><code class="sourceCode idris"><span class="fu">succPlusSucc</span> <span class="ot">:</span> (x, y <span class="ot">:</span> <span class="dt">Nat</span>) <span class="ot">-&gt;</span> x <span class="fu">+</span> <span class="dt">S</span> y <span class="fu">=</span> <span class="dt">S</span> (x <span class="fu">+</span> y)
+succPlusSucc x y <span class="fu">=</span>
+  <span class="co">{- Proceed by induction on x -}</span>
+  <span class="kw">induction</span>
+    (<span class="fu">\</span>x <span class="ot">=&gt;</span> x <span class="fu">+</span> <span class="dt">S</span> y <span class="fu">=</span> <span class="dt">S</span> (x <span class="fu">+</span> y))
+    <span class="co">{- Typechecker can infer Z + S y = S (Z + y) =&gt; S y = S y -}</span>
+    <span class="dt">Refl</span>
+    <span class="co">{- Assuming x + S y = S (x + y), show S x + S y = S (S x + y).</span>
+<span class="co">       Typechecker infers that S x + S y = S (S x + y) ~ S (x + S y) = S (S (x + y))</span>
+<span class="co">       Proof:</span>
+<span class="co">         We have</span>
+<span class="co">           px   : x + S y = S (x + y),</span>
+<span class="co">           Refl : S (S (x + y)) = S (S (x + y)),</span>
+<span class="co">         Given that sym px : S (x + y) = x + S y,</span>
+<span class="co">         `rewrite sym px in Refl` replaces the first instance of</span>
+<span class="co">         S (x + y) with x + S y in S (S (x + y)) = S (S (x + y))</span>
+<span class="co">         to yield Refl : S (x + S y) = S (S (x + y)), as desired. -}</span>
+    (<span class="fu">\</span>x <span class="ot">=&gt;</span> <span class="fu">\</span>px <span class="ot">=&gt;</span> <span class="kw">rewrite</span> sym px <span class="kw">in</span> <span class="dt">Refl</span>)
+    x</code></pre></div>
+<ol start="9" style="list-style-type: decimal">
+<li>Multiplying the successor: <span class="math inline">\(\forall x, y.~x \cdot S(y) = x \cdot y + x\)</span>. This one is a bit tricky; we have to use the above theorem plus a proof of the associativity of addition.</li>
+</ol>
+<div class="sourceCode"><pre class="sourceCode idris"><code class="sourceCode idris"><span class="fu">multPlusSucc</span> <span class="ot">:</span> (x, y <span class="ot">:</span> <span class="dt">Nat</span>) <span class="ot">-&gt;</span> x <span class="fu">*</span> <span class="dt">S</span> y <span class="fu">=</span> x <span class="fu">*</span> y <span class="fu">+</span> x
+multPlusSucc x y <span class="fu">=</span>
+  <span class="kw">induction</span>
+    <span class="co">{- Proof by induction on x. -}</span>
+    (<span class="fu">\</span>x <span class="ot">=&gt;</span> x <span class="fu">*</span> <span class="dt">S</span> y <span class="fu">=</span> x <span class="fu">*</span> y <span class="fu">+</span> x)
+    <span class="co">{- Typechecker can infer Z * S y = Z * y + Z =&gt; Z = Z -}</span>
+    <span class="dt">Refl</span>
+    <span class="co">{- Assuming x * S y = x * y + x, show S x * S y = S x * y + S x.</span>
+<span class="co">       Typechecker rewrites goal as S (y + x * S y) = (y + x * y) + S x,</span>
+<span class="co">       and infers that Refl :</span>
+<span class="co">         (y + x * y) + S x = (y + x * y) + S x</span>
+<span class="co">       Transform the goal by the inductive hypothesis:</span>
+<span class="co">         =&gt; S (y + (x * y + x)) = (y + x * y) + S x</span>
+<span class="co">       Use the theorem S (y + (x * y + x)) = y + S (x * y + x)</span>
+<span class="co">         =&gt; y + S (x * y + x) = (y + x * y) + S x</span>
+<span class="co">       Use the theorem S (x * y + x) = x * y + S x</span>
+<span class="co">         =&gt; y + (x * y + S x) = (y + x * y) + S x</span>
+<span class="co">       Use the theorem y + (x * y + S x) = (y + x * y) + S x</span>
+<span class="co">         =&gt; (y + x * y) + S x = (y + x * y) + S x</span>
+<span class="co">       Since they're now the same type, their proof is reflexivity.</span>
+<span class="co">     -}</span>
+    (<span class="fu">\</span>x, px <span class="ot">=&gt;</span>
+       <span class="kw">rewrite</span> px <span class="kw">in</span>
+       <span class="kw">rewrite</span> sym (succPlusSucc y (x <span class="fu">*</span> y <span class="fu">+</span> x)) <span class="kw">in</span>
+       <span class="kw">rewrite</span> sym (succPlusSucc (x <span class="fu">*</span> y) x)     <span class="kw">in</span>
+       <span class="kw">rewrite</span> plusAssociative y (x <span class="fu">*</span> y) (<span class="dt">S</span> x)  <span class="kw">in</span>
+       <span class="dt">Refl</span>)
+    x</code></pre></div>
+<p>That finishes it; unsurprisingly, Idris’ encoding of the natural numbers is powerful enough to simulate HA.</p>
+<h2 id="case-study">Case Study</h2>
+<p>So now that we’ve flexed our induction skills, let’s do something that’s actually useful: develop a fast and correct program in Idris using our encoding for HA. Inspired by NuPRL, an automated proof assistant developed at Cornell (Go Red!), we’ll derive a linear algorithm that computes the square root of a natural number, called “fast integer square root.” I encourage you to read the original <a href="http://www.cs.cornell.edu/courses/cs5860/2014fa/documents/Kreitz-%20Derivation%20of%20a%20Fast%20Integer%20Square%20Root%20Algorithm.pdf">paper</a> by Christoph Kreitz which details several different methods, including the derivation of a logarithmic algorithm.</p>
+<p>Anyways, here’s the proposition: <span class="math inline">\(\forall n.~\exists r.~r\cdot r\leq n\land n&lt;(r + 1)\cdot(r + 1)\)</span>. <span class="math inline">\(r\)</span> is called the <em>square root</em> of <span class="math inline">\(n\)</span>.</p>
+<p>To encode the relation <span class="math inline">\(\leq\)</span>, Idris provides the following inductive type.</p>
+<div class="sourceCode"><pre class="sourceCode idris"><code class="sourceCode idris"><span class="kw">data</span> <span class="dt">LTE</span>  <span class="ot">:</span> (n, m <span class="ot">:</span> <span class="dt">Nat</span>) <span class="ot">-&gt;</span> <span class="dt">Type</span> <span class="kw">where</span>
+  <span class="dt">LTEZero</span> <span class="ot">:</span> <span class="dt">LTE</span> <span class="dt">Z</span>    right
+  <span class="dt">LTESucc</span> <span class="ot">:</span> <span class="dt">LTE</span> left right <span class="ot">-&gt;</span> <span class="dt">LTE</span> (<span class="dt">S</span> left) (<span class="dt">S</span> right)</code></pre></div>
+<p>In other words, the base case is <span class="math inline">\(\forall n.~0\leq n\)</span>. The inductive case is, if <span class="math inline">\(n\leq m\)</span>, then <span class="math inline">\(S(n)\leq S(m)\)</span>. We’ll also use some functions in the standard library for manipulating inequalities. In particular, note that <span class="math inline">\(n &lt; m\iff n + 1\leq m\)</span>, so <code>LT n m = LTE (S n) m</code>.</p>
+<p>We will also need the following lemma, <span class="math inline">\(\forall x, y.~\lnot(x\leq y)\implies y &lt; x\)</span>.</p>
+<div class="sourceCode"><pre class="sourceCode idris"><code class="sourceCode idris"><span class="fu">notLteLt</span> <span class="ot">:</span> {x, y <span class="ot">:</span> <span class="dt">Nat</span>} <span class="ot">-&gt;</span> <span class="dt">Not</span> (x <span class="fu">`LTE`</span> y) <span class="ot">-&gt;</span> y <span class="fu">`LT`</span> x
+notLteLt {x} {y} <span class="fu">=</span>
+  <span class="kw">induction</span>
+    <span class="co">{- Proof by induction on x. -}</span>
+    (<span class="fu">\</span>x <span class="ot">=&gt;</span> <span class="dt">Not</span> (x <span class="fu">`LTE`</span> y) <span class="ot">-&gt;</span> y <span class="fu">`LT`</span> x)
+    <span class="co">{- Assume ~(0 &lt;= y), but evidence for 0 &lt;= y is given by LTEZero</span>
+<span class="co">       Therefore by ex falso quodlibet (void), y `LT` x -}</span>
+    (<span class="fu">\</span>nlte <span class="ot">=&gt;</span> void (nlte <span class="dt">LTEZero</span>))
+    <span class="co">{- Given</span>
+<span class="co">         px : ~(x &lt;= y) =&gt; y &lt; x i.e. y + 1 &lt;= x</span>
+<span class="co">         nlte : ~(x + 1 &lt;= y)</span>
+<span class="co">       Show y &lt; x + 1 i.e. y + 1 &lt;= x + 1 i.e. y &lt;= x.</span>
+<span class="co">       Proof. Case analysis.</span>
+<span class="co">         if ~(x &lt;= y), apply the IH.</span>
+<span class="co">         if y &lt;= x =&gt; y &lt; x + 1. -}</span>
+    (<span class="fu">\</span>x, px, nlte <span class="ot">=&gt;</span>
+       <span class="kw">case</span> (isLTE x y, isLTE y x) <span class="kw">of</span>
+         (<span class="dt">No</span> nlte', <span class="fu">_</span>) <span class="ot">=&gt;</span> lteSuccRight <span class="fu">$</span> px nlte'
+         (<span class="fu">_</span>,  <span class="dt">Yes</span> lte) <span class="ot">=&gt;</span> <span class="dt">LTESucc</span> lte
+         <span class="co">{- It's impossible for x &lt;= y when the</span>
+<span class="co">            assumption is ~(x &lt;= y). -}</span>
+         (<span class="dt">Yes</span> <span class="fu">_</span>,    <span class="fu">_</span>)    <span class="kw">impossible</span>)
+    x</code></pre></div>
+<p>Now for the proof, with the informal version written in the comments.</p>
+<div class="sourceCode"><pre class="sourceCode idris"><code class="sourceCode idris"><span class="co">{- forall n. exists r. r * r &lt;= n &lt; (r + 1) * (r + 1) -}</span>
+<span class="fu">intSqrtPf</span> <span class="ot">:</span> (n <span class="ot">:</span> <span class="dt">Nat</span>) <span class="ot">-&gt;</span> (r <span class="ot">:</span> <span class="dt">Nat</span> <span class="fu">**</span> ((r <span class="fu">*</span> r) <span class="fu">`LTE`</span> n, n <span class="fu">`LT`</span> (<span class="dt">S</span> r <span class="fu">*</span> <span class="dt">S</span> r)))
+intSqrtPf n <span class="fu">=</span>
+  <span class="kw">induction</span>
+    <span class="co">{- Proof by induction on n. -}</span>
+    (<span class="fu">\</span>n <span class="ot">=&gt;</span> (r <span class="ot">:</span> <span class="dt">Nat</span> <span class="fu">**</span> ((r <span class="fu">*</span> r) <span class="fu">`LTE`</span> n, n <span class="fu">`LT`</span> (<span class="dt">S</span> r <span class="fu">*</span> <span class="dt">S</span> r))))
+    <span class="co">{- Base case: n = Z. Choose r = Z.</span>
+<span class="co">       Z * Z &lt;= Z and Z &lt; 1 * 1, trivially.</span>
+<span class="co">       Typechecker infers:</span>
+<span class="co">         Z * Z &lt;= Z =&gt; Z &lt;= Z,</span>
+<span class="co">           whose proof is LTEZero : Z `LTE` Z</span>
+<span class="co">         Z &lt; 1 * 1 =&gt; Z &lt; 1,</span>
+<span class="co">           whose proof is LTESucc LTEZero : 1 `LTE` 1 ~ Z `LT` 1 -}</span>
+    (<span class="dt">Z</span> <span class="fu">**</span> (<span class="dt">LTEZero</span>, <span class="dt">LTESucc</span> <span class="dt">LTEZero</span>))
+    <span class="co">{- Given</span>
+<span class="co">         lte : r * r &lt;= n</span>
+<span class="co">         lt  : n &lt; (r + 1) * (r + 1) i.e. n + 1 &lt;= r^2 + 2r + 1, show</span>
+<span class="co">         exists r'. r' * r' &lt;= n + 1 &lt; (r' + 1) * (r' + 1)</span>
+<span class="co">       Proof. By case analysis.</span>
+<span class="co">         if (r + 1) * (r + 1) &lt;= n + 1, then</span>
+<span class="co">            r' = r + 1.</span>
+<span class="co">            We get (r + 1) * (r + 1) &lt;= n + 1 by the conditional.</span>
+<span class="co">            If we add 1 to the LHS and 2r + 3 to the RHS of lt,</span>
+<span class="co">            we get n + 1 &lt; (r + 2) * (r + 2).</span>
+<span class="co">         else</span>
+<span class="co">           r' = r.</span>
+<span class="co">           We get r * r &lt;= n =&gt; r * r &lt;= n + 1.</span>
+<span class="co">           Since we know ~((r + 1) * (r + 1) &lt;= n + 1), </span>
+<span class="co">             we get n + 1 &lt; (r + 1) * (r + 1). -}</span>
+    (<span class="fu">\</span>n, (r <span class="fu">**</span> (lte, lt)) <span class="ot">=&gt;</span>
+      <span class="kw">case</span> isLTE (<span class="dt">S</span> r <span class="fu">*</span> <span class="dt">S</span> r) (<span class="dt">S</span> n) <span class="kw">of</span>
+        <span class="dt">Yes</span> lte' <span class="ot">=&gt;</span> (<span class="dt">S</span> r <span class="fu">**</span> (lte',
+          <span class="kw">let</span> lt' <span class="fu">=</span>
+            <span class="dt">LTESucc</span> (lteTransitive lt (lteAddRight (<span class="dt">S</span> r <span class="fu">*</span> <span class="dt">S</span> r) {m <span class="fu">=</span> r <span class="fu">+</span> r})) <span class="kw">in</span>
+          <span class="kw">let</span> lt'' <span class="fu">=</span> lteSuccRight (lteSuccRight lt') <span class="kw">in</span>
+          <span class="co">{- Rewrite lt'' to match the goal type. -}</span>
+          <span class="kw">let</span> lt1 <span class="fu">=</span> replace {<span class="dt">P</span> <span class="fu">=</span> <span class="fu">\</span>x <span class="ot">=&gt;</span> <span class="dt">LTE</span> (<span class="dt">S</span> (<span class="dt">S</span> n)) (<span class="dt">S</span> (<span class="dt">S</span> (<span class="dt">S</span> (<span class="dt">S</span> x))))}
+            (plusAssociative (r <span class="fu">+</span> r <span class="fu">*</span> <span class="dt">S</span> r) r r) lt'' <span class="kw">in</span>
+          <span class="kw">let</span> lt2 <span class="fu">=</span> replace {<span class="dt">P</span> <span class="fu">=</span> <span class="fu">\</span>x <span class="ot">=&gt;</span> <span class="dt">LTE</span> (<span class="dt">S</span> (<span class="dt">S</span> n)) (<span class="dt">S</span> (<span class="dt">S</span> (<span class="dt">S</span> (<span class="dt">S</span> (x <span class="fu">+</span> r <span class="fu">+</span> r)))))}
+            (sym (multRightSuccPlus r (<span class="dt">S</span> r))) lt1 <span class="kw">in</span>
+          <span class="kw">let</span> lt3 <span class="fu">=</span> replace {<span class="dt">P</span> <span class="fu">=</span> <span class="fu">\</span>x <span class="ot">=&gt;</span> <span class="dt">LTE</span> (<span class="dt">S</span> (<span class="dt">S</span> n)) (<span class="dt">S</span> (<span class="dt">S</span> (<span class="dt">S</span> (<span class="dt">S</span> (x <span class="fu">+</span> r)))))}
+            (plusCommutative (r <span class="fu">*</span> <span class="dt">S</span> (<span class="dt">S</span> r)) r) lt2 <span class="kw">in</span>
+          <span class="kw">let</span> lt4 <span class="fu">=</span> replace {<span class="dt">P</span> <span class="fu">=</span> <span class="fu">\</span>x <span class="ot">=&gt;</span> <span class="dt">LTE</span> (<span class="dt">S</span> (<span class="dt">S</span> n)) (<span class="dt">S</span> (<span class="dt">S</span> (<span class="dt">S</span> (<span class="dt">S</span> x))))}
+            (plusCommutative (r <span class="fu">+</span> r <span class="fu">*</span> <span class="dt">S</span> (<span class="dt">S</span> r)) r) lt3 <span class="kw">in</span>
+          <span class="kw">let</span> lt5 <span class="fu">=</span> replace {<span class="dt">P</span> <span class="fu">=</span> <span class="fu">\</span>x <span class="ot">=&gt;</span> <span class="dt">LTE</span> (<span class="dt">S</span> (<span class="dt">S</span> n)) (<span class="dt">S</span> (<span class="dt">S</span> (<span class="dt">S</span> x)))}
+            (plusSuccRightSucc r (r <span class="fu">+</span> r <span class="fu">*</span> <span class="dt">S</span> (<span class="dt">S</span> r))) lt4 <span class="kw">in</span>
+          <span class="kw">let</span> lt6 <span class="fu">=</span> replace {<span class="dt">P</span> <span class="fu">=</span> <span class="fu">\</span>x <span class="ot">=&gt;</span> <span class="dt">LTE</span> (<span class="dt">S</span> (<span class="dt">S</span> n)) (<span class="dt">S</span> (<span class="dt">S</span> x))}
+            (plusSuccRightSucc r (<span class="dt">S</span> (r <span class="fu">+</span> r <span class="fu">*</span> <span class="dt">S</span> (<span class="dt">S</span> r)))) lt5 <span class="kw">in</span>
+            lt6))
+        <span class="dt">No</span> nlte <span class="ot">=&gt;</span> (r <span class="fu">**</span> (lteSuccRight lte, notLteLt nlte)))
+    n</code></pre></div>
+<p>If you look closely, the constructive proof for the existence of an integer square root encodes a recursive algorithm to find it! However, now that the proof is done, we don’t really care for it. In other words, we’ll define a function that projects out <span class="math inline">\(r\)</span> and throws out the proof term for ease of use.</p>
+<div class="sourceCode"><pre class="sourceCode idris"><code class="sourceCode idris"><span class="fu">intSqrt</span> <span class="ot">:</span> <span class="dt">Nat</span> <span class="ot">-&gt;</span> <span class="dt">Nat</span>
+intSqrt n <span class="fu">=</span> fst (intSqrtPf n)</code></pre></div>
+<p>Now let’s test this in the Idris REPL.</p>
+<pre><code>*HA&gt; intSqrt 49
+7 : Nat
+*HA&gt; intSqrt 200
+14 : Nat</code></pre>
+<p>It works! We just extracted an algorithm for finding the square root of an integer that’s pretty decent in terms of speed. But most importantly, we know with 100% certainty that it’s correct up-to specification.</p>
+<p>Out of curiosity, what does a proof term look like for <code>intSqrtPf</code>? Let’s try it on <span class="math inline">\(n = 4\)</span>.</p>
+<pre><code>*HA&gt; intSqrtPf 4
+(2 **
+ (LTESucc (LTESucc (LTESucc (LTESucc LTEZero))),
+  LTESucc (LTESucc (LTESucc (LTESucc (LTESucc LTEZero)))))) :
+    (r : Nat ** ((r * r) `LTE` 4, 4 `LT` (S r * S r)))</code></pre>
+<p>The proof of existence yields <span class="math inline">\(r = 2\)</span>, as expected. In order to understand the proof terms, you need to read them as series of implications. Given <code>LTEZero : LTE 0 0</code>, we know <code>LTESucc : LTE n m -&gt; LTE (S n) (S m)</code>. As a result, the repeated applications of <code>LTESucc</code> give the cascade <span class="math inline">\(0\leq 0\implies 1\leq 1\implies 2\leq 2\implies 3\leq 3\implies 4\leq 4\)</span> in the proof for <span class="math inline">\(r\cdot r\leq 4\)</span>. The goal for the second part is <span class="math inline">\(4 &lt; 9\)</span> i.e. <span class="math inline">\(5\leq 9\)</span>. Given <code>LTEZero : LTE 0 4</code>, we get <span class="math inline">\(0\leq 4\implies 1\leq 5\implies 2\leq 6\implies 3\leq 7\implies 4\leq 8\implies 5\leq 9\iff 4 &lt; 9\)</span>, as desired.</p>
+<h2 id="future-work">Future Work</h2>
+<p>So now that we’ve proven to ourselves (pun intended) that constructive proofs are very useful for software development, how can we make this process less painful? In particular, having to manually show to the typechecker that certain terms are equal is <em>really</em> annoying. To answer that, many languages like Idris offer an interactive interface for proofs using <em>tactics</em>, functions that automate certain parts of the proof process like demonstrating equality.</p>
+<p>And, if you’re curious about my previous claim that constructive logic subsumes classical logic, read Cornell professor Robert Constable’s <a href="https://arxiv.org/abs/1409.0266">paper</a> on encoding classical logic using “virtual evidence.”</p>
+<p>The source code for this post is <a href="https://gist.github.com/ssomayyajula/2b3c60ad4c671b2f8989d2c59a2a67fe">here</a>.</p>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    /* * * CONFIGURATION VARIABLES * * */
+    var disqus_shortname = 'ssomayyajula';
+    
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+
+        </div>
+        <div id="footer">
+            Site proudly generated by
+            <a href="http://jaspervdj.be/hakyll">Hakyll</a>
+        </div>
+    </body>
+</html>

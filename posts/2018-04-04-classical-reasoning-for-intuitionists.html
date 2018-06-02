@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <title>Classical reasoning for intuitionists</title>
+        <link rel="stylesheet" type="text/css" href="../css/default.css" />
+        <link rel="stylesheet" type="text/css" href="../css/syntax.css" />
+        <link rel="shortcut icon" type="image/png" href="../images/haskell-logo.png" />
+        <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body>
+        <div id="header">
+            <div id="logo">
+                <a href="../">Siva Somayyajula</a>
+            </div>
+            <div id="navigation">
+                <a href="../files/resume.pdf">résumé</a>
+                <a href="mailto:sks266@cornell.edu">email</a>
+                <a href="https://github.com/ssomayyajula/">github</a>
+                <a href="https://www.linkedin.com/in/sivasomayyajula">linkedin</a>
+            </div>
+        </div>
+        <div id="content">
+            <h1>Classical reasoning for intuitionists</h1>
+<div class="info">
+    Posted on April  4, 2018
+</div>
+<blockquote style="text-align:right;">
+<p>
+By ratiocination, I mean computation.
+</p>
+<footer>
+—Thomas Hobbes
+</footer>
+</blockquote>
+<h2 id="introduction">Introduction</h2>
+<p>Realizability captures the computational flavor of intuitionistic logic by defining what the proof/realizer of a proposition ought to be in terms of computable objects i.e. terms of the lambda calculus. Here’s a quick, and I hope, intuitive summary of a realizability interpretation for higher-order logic.</p>
+<center>
+<table>
+<thead>
+<tr class="header">
+<th align="center"></th>
+<th align="center"><strong>is proven by</strong></th>
+<th align="center"></th>
+<th align="center"><strong>if</strong></th>
+<th align="left"></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center"><span class="math inline">\(P\land Q\)</span></td>
+<td align="center"></td>
+<td align="center"><span class="math inline">\((p, q)\)</span></td>
+<td align="center"></td>
+<td align="left"><span class="math inline">\(p\)</span> proves <span class="math inline">\(P\)</span> and <span class="math inline">\(q\)</span> proves <span class="math inline">\(Q\)</span></td>
+</tr>
+<tr class="even">
+<td align="center"><span class="math inline">\(P\lor Q\)</span></td>
+<td align="center"></td>
+<td align="center"><span class="math inline">\(\textsf{inl}(p)\)</span></td>
+<td align="center"></td>
+<td align="left"><span class="math inline">\(p\)</span> proves <span class="math inline">\(P\)</span></td>
+</tr>
+<tr class="odd">
+<td align="center"><span class="math inline">\(P\lor Q\)</span></td>
+<td align="center"></td>
+<td align="center"><span class="math inline">\(\textsf{inr}(q)\)</span></td>
+<td align="center"></td>
+<td align="left"><span class="math inline">\(q\)</span> proves <span class="math inline">\(Q\)</span></td>
+</tr>
+<tr class="even">
+<td align="center"><span class="math inline">\(P\Rightarrow Q\)</span></td>
+<td align="center"></td>
+<td align="center"><span class="math inline">\(\lambda p.~f(p)\)</span></td>
+<td align="center"></td>
+<td align="left">for all proofs <span class="math inline">\(p\)</span> of <span class="math inline">\(P\)</span>, <span class="math inline">\(f(p)\)</span> proves <span class="math inline">\(Q\)</span></td>
+</tr>
+<tr class="odd">
+<td align="center"><span class="math inline">\(\forall x, P(x)\)</span></td>
+<td align="center"></td>
+<td align="center"><span class="math inline">\(\lambda x.~p(x)\)</span></td>
+<td align="center"></td>
+<td align="left">for all <span class="math inline">\(x\)</span>, <span class="math inline">\(p(x)\)</span> proves <span class="math inline">\(P(x)\)</span></td>
+</tr>
+<tr class="even">
+<td align="center"><span class="math inline">\(\exists x, P(x)\)</span></td>
+<td align="center"></td>
+<td align="center"><span class="math inline">\((x, px)\)</span></td>
+<td align="center"></td>
+<td align="left"><span class="math inline">\(px\)</span> proves <span class="math inline">\(P(x)\)</span></td>
+</tr>
+<tr class="odd">
+<td align="center"><span class="math inline">\(x = y\)</span></td>
+<td align="center"></td>
+<td align="center"><span class="math inline">\(\textsf{refl}\)</span></td>
+<td align="center"></td>
+<td align="left"><span class="math inline">\(x\)</span> is semantically identical to <span class="math inline">\(y\)</span></td>
+</tr>
+</tbody>
+</table>
+</center>
+<p>Furthermore, let <span class="math inline">\(\top\)</span> be always proven by <span class="math inline">\(()\)</span> and <span class="math inline">\(\bot\)</span> be proven by nothing at all. Then, define <span class="math inline">\(\lnot P\triangleq P\Rightarrow\bot\)</span>. In other words, we know <span class="math inline">\(P\)</span> doesn’t hold when it implies a contradiction.</p>
+<p>As a result, a proof of the law of excluded middle (LEM) <span class="math inline">\(P\lor\lnot P\)</span>—the single axiom rejected by intuitionists—would be an algorithm that can compute evidence in support of or contrary to <span class="math inline">\(P\)</span> for <em>any</em> <span class="math inline">\(P\)</span>. This is absurd, what if <span class="math inline">\(P\)</span> is uncomputable or your logic is incomplete? <strong>The rejection of LEM is a statement that the only knowledge obtainable is that which is computable modulo completeness.</strong></p>
+<p>However, LEM is admissible with certain caveats. First, you can do the obvious thing and include LEM <em>without a realizer</em>. Of course, any canonicity result you have proven about your theory is now utterly destroyed. Furthermore, any theory with a constructive proof of decidability <span class="math inline">\(\textsf{decide}(P)\)</span>, which computes evidence for or against <span class="math inline">\(P\)</span>, may include LEM with <span class="math inline">\(\textsf{decide}\)</span> as its realizer. However, when working in an undecidable theory like higher-order logic, there are different methods of recovering classical reasoning. Here’s a summary of all of the ones I’ve seen during my studies.</p>
+<h2 id="double-negation-translation">Double-negation translation</h2>
+<p>We may embed classical logic into intuitionistic logic via a syntactic transformation called the <em>double-negation translation</em>. For the moment, let’s restrict our attention to propositional logic.</p>
+<dl>
+<dt>
+<b>Double-negation translation</b>
+<dd>
+Double negate any atomic subformula and disjunction in a formula.
+</dd>
+</dt>
+</dl>
+<p>Then, we get the following result.</p>
+<dl>
+<dt>
+<b>Corollary of Glivenko’s theorem</b>
+</dt>
+<dd>
+<span class="math inline">\(\phi\)</span> is a classical tautology if and only if the double-negation translation of <span class="math inline">\(\phi\)</span> is an intuitionistic tautology.
+</dd>
+</dl>
+<p>Essentially, whenever we can’t prove a classical tautology intuitionistically, we may obtain a result that is equal in <em>truth</em> (in terms of truth-value semantics), since double-negation is eliminable in classical logic, but not in <em>evidence</em> (in terms of realizability). For example, the version of De Morgan’s law <span class="math inline">\(\lnot(P\land Q)\Rightarrow\lnot P\lor\lnot Q\)</span> is classically but not intuitionistically valid. However, we can prove the following analogue (in Lean).</p>
+<pre class="lean"><code>example {P Q : Prop} : ¬(¬¬P ∧ ¬¬Q) → ¬¬(¬¬¬P ∨ ¬¬¬Q) :=
+λ h c, h ⟨λ np, c (or.inl (λ nnp, nnp np)), λ nq, c (or.inr (λ nnq, nnq nq))⟩</code></pre>
+<p>And of course, we can prove something equivalent to LEM.</p>
+<pre class="lean"><code>example {P : Prop} : ¬¬(¬¬P ∨ ¬¬¬P) :=
+λ h, h (or.inr (λ nnp, h (or.inl nnp)))</code></pre>
+<p>When quantifiers enter the mix, the translation becomes a bit more complicated, see the <a href="https://ncatlab.org/nlab/show/double+negation+translation#firstorder_case">here</a> for more details.</p>
+<p>While this method technically works, it’s a little unsatisfying, because we end up having to prove a different theorem altogether. So, maybe we can do better.</p>
+<p><em>Reference: <a href="https://ncatlab.org/nlab/show/double+negation+translation">Double-negation translation</a> at the nLab</em></p>
+<h2 id="proof-erasure">Proof erasure</h2>
+<p>Let’s further investigate the possiblity of admitting LEM without a realizer. In general, we are interested in proving propositions of the form <span class="math inline">\(\forall x, (P(x)\Rightarrow\exists y, Q(y))\)</span>. Computationally, it is a statement that objects with some property can be transformed into other objects with some other property, so its realizer is of the form <span class="math inline">\(f\triangleq\lambda x.~\lambda px.~(f(x), g(f(x), px))\)</span>. Now, assume that the realizers of our knowledgebase are extracted to a codebase to be run as a complete program. By virtue of our proofs, <span class="math inline">\(Q(y)\)</span> holds for all outputs <span class="math inline">\(y\)</span> and that all callers of <span class="math inline">\(f\)</span> are guaranteed to pass inputs <span class="math inline">\(x\)</span> satisfying <span class="math inline">\(P(x)\)</span>, so the interactions in our codebase are totally safe. As a result, at runtime, we only care about the <em>computational content</em>—<span class="math inline">\(x\)</span> and <span class="math inline">\(y\)</span>—and not the proofs witnessing their adherence to certain specifications. Thus, we can erase them from the realizer to obtain the term <span class="math inline">\(\lambda x.~f(x)\)</span>, which is equally safe but dramatically more efficient in the best case.</p>
+<p>There are many ways to codify erasure into a proof system, so here’s one way: Lean has a special universe <code>Prop</code> for propositions which is distinct from the universe <code>Type</code> for proper types with computational content. However, the terms of types in <code>Prop</code> can be safely erased if and only if they are not involved in the computation of an object whose type is in <code>Type</code>. Consider the following example.</p>
+<pre class="lean"><code>example : Π (x y : ℕ), x ≤ y → ℕ
+| x _ (nat.less_than_or_equal.refl _) := x
+| _ y _                               := y</code></pre>
+<p>This term returns <span class="math inline">\(x\)</span> if <span class="math inline">\(x = y\)</span> or <span class="math inline">\(y\)</span> if <span class="math inline">\(x &lt; y\)</span>. However, it will not typecheck in Lean, since a term from the <span class="math inline">\(\leq\)</span> proposition is being used to compute the output. If it were erased, then the realizer would not know whether to return <span class="math inline">\(x\)</span> or <span class="math inline">\(y\)</span>!</p>
+<p>With erasure, noncomputable definitions like LEM are safely included into Lean’s <a href="https://github.com/leanprover/lean/blob/master/library/init/classical.lean#L69">standard library</a> without breaking canonicity. This is useful in reasoning about algorithms; for example, it is easier to prove that a greedy algorithm returns only optimal outputs by contradiction (i.e. double-negation elimination, which is equivalent to LEM)—by showing they are <em>not suboptimal</em>. The algorithm itself is constructive by virtue of being an algorithm, but the specificational proof—of optimality—need not be constructive, since it is erased at runtime.</p>
+<pre class="lean"><code>def greedy_is_optimal (x : input) : {y // is_optimal y} :=
+begin
+  existsi ...,
+  by_contradiction,
+  ...
+end</code></pre>
+<p>To recover classical reasoning completely, <code>Prop</code> is also <em>proof irrelevant</em> i.e. it denies that multiple proofs of the same proposition are distinguishable up to propositional equality (in the case of Lean; some systems have this hold judgmentally). After all, if certain data are to be erased anyway, why should the proof system distinguish between them? For example, if we have a type of nonzero natural numbers consisting of pairs <span class="math inline">\((n, pn)\)</span> where <span class="math inline">\(pn\)</span> is a proof that <span class="math inline">\(n\neq0\)</span>, then we would like <span class="math inline">\((n,pn)=(n,pn')\)</span> if and only if <span class="math inline">\(n=n'\)</span> i.e. we don’t want to have to prove that <span class="math inline">\(pn=pn'\)</span>. Users of systems without proof irrelevance do not have this luxury, and would have to manually prove <span class="math inline">\(pn=pn'\)</span>, which is a pain and even more painful if it is outright false by design. We can summarize this section with the following mantra.</p>
+<center>
+<strong>Classical reasoning is admissible when it’s not leveraged computationally</strong>
+</center>
+<p>To see how other systems do it, check out the reference below as well as Constable’s paper on <a href="https://arxiv.org/pdf/1409.0266.pdf">virtual evidence</a>.</p>
+<p><em>Reference: <a href="https://github.com/sweirich/pi-forall/blob/2014/notes4.md#erasure-aka-forall-types">Erasure</a> by Stephanie Weirich</em></p>
+<h2 id="first-class-continuations">First-class continuations</h2>
+<p>Lastly, it turns out that we can embed LEM directly (kind of) in a language with <em>first-class continuations</em>, like Standard ML. For the moment, forget about everything you know about continuations, and assume that SML defines <code>type 'a cont = 'a -&gt; 'b</code> but abstracted, <code>callcc : ('a cont -&gt; 'a) -&gt; 'a</code>, and <code>throw : 'a cont -&gt; 'a -&gt; 'b</code>. Expanding the type of <code>callcc</code> shows that it realizes Peirce’s law, which is equivalent to LEM! In fact, here’s a proof that Peirce’s law implies LEM, with some definitions first (<span class="math inline">\(\bot\)</span> and disjunction).</p>
+<div class="sourceCode"><pre class="sourceCode ml"><code class="sourceCode ocaml">datatype void = void
+
+<span class="kw">fun</span> absurd (v : void) : 'a =
+  absurd v
+
+<span class="kw">type</span> 'a not = 'a -&gt; void
+
+datatype ('p, 'q) <span class="kw">or</span> = <span class="dt">L</span> <span class="kw">of</span> 'p | <span class="dt">R</span> <span class="kw">of</span> 'q
+
+<span class="ot">open</span> SMLofNJ<span class="kw">.</span>Cont
+
+<span class="kw">fun</span> lem (_ : <span class="dt">unit</span>) : ('p, 'p not) <span class="kw">or</span> =
+  callcc (fn k =&gt; <span class="dt">R</span> (throw k o <span class="dt">L</span>))</code></pre></div>
+<p>This seems too good to be true, does SML have a magic oracle that can decide any proposition? No! To understand why, we need to figure out how continuations, the terms inhabiting <code>'a cont</code>, work. In reality, a continuation is not a function, but a function-like object that intuitively represents the current evaluation context when acquired through <code>callcc</code>. <code>throw</code>ing a value to the current continuation (from <code>callcc</code>) resumes execution of the term in that context but with the new value, implementing some sort of non-local control flow.</p>
+<p>Thus, looking at how LEM is implemented, <strong>it is not a realizer in our interpretation</strong>—it will immediately return <span class="math inline">\(\lnot P\)</span> unless it is thrown a proof of <span class="math inline">\(P\)</span> later in time. To see this in action, consider the following query of whether or not an integer exists.</p>
+<div class="sourceCode"><pre class="sourceCode ml"><code class="sourceCode ocaml">- case lem () <span class="kw">of</span>
+    <span class="dt">L</span> i  =&gt; print (Int<span class="kw">.</span>toString i ^ <span class="st">&quot;</span><span class="ch">\n</span><span class="st">&quot;</span>)
+  | <span class="dt">R</span> ni =&gt; print <span class="st">&quot;integers don't exist!</span><span class="ch">\n</span><span class="st">&quot;</span>
+
+integers don't exist!</code></pre></div>
+<p>That’s debatable…in fact, if we refute this by constructing a witness, we get some sensible output, namely our proof: <code>0</code>.</p>
+<div class="sourceCode"><pre class="sourceCode ml"><code class="sourceCode ocaml">- case lem () <span class="kw">of</span>
+    <span class="dt">L</span> i  =&gt; i
+  | <span class="dt">R</span> ni =&gt; absurd (ni <span class="dv">0</span>)
+- <span class="kw">val</span> it = <span class="dv">0</span> : <span class="dt">int</span></code></pre></div>
+<p>Nevertheless, we get to do classical reasoning, so here’s double-negation elimination i.e. proof by contradiction.</p>
+<div class="sourceCode"><pre class="sourceCode ml"><code class="sourceCode ocaml"><span class="kw">fun</span> dne (h : 'p not not) : 'p =
+  case lem () <span class="kw">of</span>
+    <span class="dt">L</span> a  =&gt; a
+  | <span class="dt">R</span> na =&gt; absurd (h na)</code></pre></div>
+<p>Finally, we can prove the above variant of De Morgan’s law directly, following the proof <a href="https://proofwiki.org/wiki/De_Morgan%27s_Laws_(Logic)/Disjunction_of_Negations/Formulation_1/Reverse_Implication">here</a>.</p>
+<div class="sourceCode"><pre class="sourceCode ml"><code class="sourceCode ocaml"><span class="kw">fun</span> de_morgan (h : ('p * 'q) not) : ('p not, 'q not) <span class="kw">or</span> =
+  dne (fn f =&gt; h (dne (f o <span class="dt">L</span>), dne (f o <span class="dt">R</span>)))</code></pre></div>
+<p>Recall that <code>unit</code> is <span class="math inline">\(\top\)</span>. If we run <code>de_morgan</code> on some examples, we get straight up counterintuitive results.</p>
+<div class="sourceCode"><pre class="sourceCode ml"><code class="sourceCode ocaml">- case de_morgan (fn ((x, y) : <span class="dt">unit</span> * void) =&gt; y) <span class="kw">of</span>
+    <span class="dt">L</span> np =&gt; print <span class="st">&quot;true is false!</span><span class="ch">\n</span><span class="st">&quot;</span>
+  | <span class="dt">R</span> nq =&gt; print <span class="st">&quot;false is false!</span><span class="ch">\n</span><span class="st">&quot;</span></code></pre></div>
+<p><code>true is false!</code></p>
+<div class="sourceCode"><pre class="sourceCode ml"><code class="sourceCode ocaml">- case de_morgan (fn ((x, y) : <span class="dt">unit</span> * void) =&gt; y) <span class="kw">of</span>
+    <span class="dt">L</span> np =&gt; absurd (np ())
+  | <span class="dt">R</span> nq =&gt; print <span class="st">&quot;false is false!</span><span class="ch">\n</span><span class="st">&quot;</span></code></pre></div>
+<p><code>false is false!</code></p>
+<p>Stay away from <code>callcc</code>, kids.</p>
+<p><em>Reference: <a href="https://www.cs.cmu.edu/~rwh/courses/typesys/hws/hw5/hw5-handout.pdf">Continuations and Logic</a> by Evan Cavallo</em></p>
+<p><em>P.S. Any double-negation translation with respect to proof terms is a transformation into continuation-passing style, where the current evaluation context is an explicit parameter of every term to be called at every computation step.</em></p>
+<h2 id="conclusion">Conclusion</h2>
+<p>Classical reasoning in intuitionistic logic is attainable using different techniques with different implications. For something more like the last section, which dealt with realizing LEM directly, check Alexandre Miquel’s <em><a href="https://link.springer.com/chapter/10.1007/978-3-642-21691-6_1">A Survey of Classical Realizability</a></em> to learn about such advanced topics as forcing and the model theory behind the madness.</p>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    /* * * CONFIGURATION VARIABLES * * */
+    var disqus_shortname = 'ssomayyajula';
+    
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+
+        </div>
+        <div id="footer">
+            Site proudly generated by
+            <a href="http://jaspervdj.be/hakyll">Hakyll</a>
+        </div>
+    </body>
+</html>

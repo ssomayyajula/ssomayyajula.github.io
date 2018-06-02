@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <title>On the banker's algorithm</title>
+        <link rel="stylesheet" type="text/css" href="../css/default.css" />
+        <link rel="stylesheet" type="text/css" href="../css/syntax.css" />
+        <link rel="shortcut icon" type="image/png" href="../images/haskell-logo.png" />
+        <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body>
+        <div id="header">
+            <div id="logo">
+                <a href="../">Siva Somayyajula</a>
+            </div>
+            <div id="navigation">
+                <a href="../files/resume.pdf">résumé</a>
+                <a href="mailto:sks266@cornell.edu">email</a>
+                <a href="https://github.com/ssomayyajula/">github</a>
+                <a href="https://www.linkedin.com/in/sivasomayyajula">linkedin</a>
+            </div>
+        </div>
+        <div id="content">
+            <h1>On the banker's algorithm</h1>
+<div class="info">
+    Posted on May 18, 2018
+</div>
+<p>In this post, we’ll learn the banker’s algorithm and why it can be used to determine whether a multiprogram will deadlock. I’ll be pretty fast and loose with my use of “processes” vs. “threads” because the abstractions are the same.</p>
+<h2 id="motivation">Motivation</h2>
+<p>Operating systems generally support the ability to run multiple processes simultaneously. Inevitably, processes share memory to communicate information, so the concurrent modification of this data can be a source of error. In practice, simultaneous accesses to the same part of memory by multiple processes is executed as a non-deterministic/time-dependent sequence of accesses, so we can observe different <em>interleavings</em> of accesses over different executions of the same program.</p>
+<p>Without pretense however, a sequential read and write or sequential writes by two separate processes to the same part of memory, or <em>data races</em>, are problematic because each interleaving of these actions will produce a different state of memory. We expect the same program behavior under all interleavings, so we need a mechanism to avoid data races, and more generally, any unwanted interleavings. <em>Mutual exclusion</em> structures (locks, semaphores, etc.) can be used to avoid data races and unwanted interleavings by allowing processes to (wait to) acquire and relinquish exclusive access to parts of memory for any period of time.</p>
+<p>However, mutual exclusion is dangerous. For the rest of this post, we’ll conflate the mutual exclusion structure guarding a part of memory with the part of memory itself and call it a <em>resource</em>, because in practice, they’re indistinguishable. Now, consider the following scenario: there are two concurrently executing processes <span class="math inline">\(P_1\)</span> and <span class="math inline">\(P_2\)</span> that would like to acquire (exclusive) access to resources <span class="math inline">\(R_1\)</span> and <span class="math inline">\(R_2\)</span> in memory. <span class="math inline">\(P_1\)</span> attempts to and successfully acquires <span class="math inline">\(R_1\)</span> while <span class="math inline">\(P_2\)</span> attempts the same, and <span class="math inline">\(P_2\)</span> attempts to and successfully acquires <span class="math inline">\(R_2\)</span> at the same time <span class="math inline">\(P_1\)</span> attempts to do the same. This circular dependence is called <em>deadlock</em>.</p>
+<p>Since neither process relinqushes access to either resource, <span class="math inline">\(P_1\)</span> and <span class="math inline">\(P_2\)</span> wait indefinitely (<em>starvation</em>) to acquire <span class="math inline">\(R_2\)</span> and <span class="math inline">\(R_1\)</span>, respectively. In other words, <strong>deadlock implies starvation</strong>, or equivalently, <strong>no starvation implies no deadlock</strong></p>
+<p>Note that <strong>starvation does not necessarily imply deadlock</strong>—processes can starve without a circular dependence. For example, let <span class="math inline">\(P_1\)</span> acquire <span class="math inline">\(R\)</span> and then let <span class="math inline">\(P_2\)</span> attempt to acquire <span class="math inline">\(R\)</span>. If <span class="math inline">\(P_1\)</span> never releases <span class="math inline">\(R\)</span>, then <span class="math inline">\(P_2\)</span> will starve, but <span class="math inline">\(P_1\)</span> is not attempting to acquire a resource held by <span class="math inline">\(P_2\)</span>.</p>
+<p>We can design programs to statically guarantee the absence of deadlock (<em>deadlock prevention</em>), or we can have our operating system allocate memory to processes dynamically in a way that avoids deadlock over their lifetime (<em>deadlock avoidance</em>). The banker’s algorithm determines whether this is possible.</p>
+<h2 id="bankers-algorithm">Banker’s Algorithm</h2>
+<p>In practice, the system must delay certain acquisitions and find a schedule that avoids deadlock. The acquisition method for each process would look something like this:</p>
+<pre><code>Process::Acquire(resource_type) {
+  atomically {
+    wait until system can grant 1 resource of type resource_type;
+    immediately acquire 1 resource of said type;
+  }
+}</code></pre>
+<p>To determine whether the system can actually grant a certain acquisition at a certain time, we can simulate the acquisition and check whether the system could potentially deadlock. That is, <strong>the system will <em>not</em> deadlock if it can allocate its remaining resources to each process in some order such that each process gets all the resources it needs to execute.</strong></p>
+<p>Here are some simplifying assumptions we’ll make about our operating system and processes. The OS knows how many resources it can allocate to a fixed number of processes. Over time, each process attempts to acquire and release resources up-to a self-declared maximum. Therefore, “all the resources [a process] needs” are its maximum.</p>
+<p>The banker’s algorithm determines whether the system will not deadlock in the way we described above. We’ll study it through example; let there be <span class="math inline">\(n=4\)</span> processes and <span class="math inline">\(m=3\)</span> types of resources. Here’s what we need to know.</p>
+<ol style="list-style-type: decimal">
+<li><p><span class="math inline">\(\textsf{Total}:=\begin{bmatrix}9\\12\\12\end{bmatrix}\in\mathbb{N}^m\)</span> where <span class="math inline">\(\textsf{Total}_i\)</span> is the total number of resources of type <span class="math inline">\(i\)</span> in this system</p></li>
+<li><p><span class="math inline">\(\textsf{Max}:=\begin{bmatrix} 3 &amp; 4 &amp; 4\\ 3 &amp; 5 &amp; 3\\ 4 &amp; 6 &amp; 3\\ 1 &amp; 4 &amp; 2 \end{bmatrix}\in\mathbb{N}^{n\times m}\)</span> where process <span class="math inline">\(i\)</span> may acquire at most <span class="math inline">\(\textsf{Max}_{i,j}\)</span> resources of type <span class="math inline">\(j\)</span> over its lifetime i.e. independent of time.</p></li>
+<li><p><span class="math inline">\(\textsf{Alloc}:=\begin{bmatrix} 1 &amp; 2 &amp; 3\\ 2 &amp; 1 &amp; 3\\ 4 &amp; 5 &amp; 3\\ 1 &amp; 2 &amp; 2 \end{bmatrix}\in\mathbb{N}^{n\times m}\)</span> where process <span class="math inline">\(i\)</span> currently holds <span class="math inline">\(\textsf{Alloc}_{i,j}\)</span> resources of type <span class="math inline">\(j\)</span></p></li>
+</ol>
+<p>Consquently, <span class="math inline">\(\textsf{MaxReq}=\textsf{Max}-\textsf{Alloc}\)</span> is the resources of each type remaining to be allocated to each process.</p>
+<p>Now, there are <span class="math inline">\(\textsf{Avail}_j:=\textsf{Total}_j-\sum_{i=1}^n\textsf{Alloc}_{i,j}=\begin{bmatrix}1\\2\\1\end{bmatrix}\in\mathbb{N}^m\)</span> resources of type <span class="math inline">\(j\)</span> available for allocation.</p>
+<p>We will attempt to find a safe sequence of allocations. We will iteratively build up a sequence until we have included all processes—at each step, if we find a process <span class="math inline">\(i\)</span> (in order) such that <span class="math inline">\(\textsf{MaxReq}_{i,j}\leq\textsf{Avail}_j\)</span> for all <span class="math inline">\(j\)</span> i.e. the system can accommodate the allocation with the resources it has, then we can append this to our sequence and continue, updating <span class="math inline">\(\textsf{Avail}_j:=\textsf{Avail}_j+\textsf{Alloc}_{i,j}\)</span> for all <span class="math inline">\(j\)</span>, with the idea that the process has terminated and we can reclaim its resources.</p>
+<p>By applying this process, the safe sequence is processes 2, 3, 0, and 1, with <span class="math inline">\(\textsf{Avail}\)</span> evolving like so over time:</p>
+<p><span class="math display">\[\begin{bmatrix}5\\7\\4\\\end{bmatrix},\begin{bmatrix}6\\9\\6\\\end{bmatrix},\begin{bmatrix}7\\11\\9\\\end{bmatrix},\begin{bmatrix}9\\12\\12\\\end{bmatrix}\]</span></p>
+<h2 id="conclusion">Conclusion</h2>
+<p>Maybe you’ll think twice about using threads.</p>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    /* * * CONFIGURATION VARIABLES * * */
+    var disqus_shortname = 'ssomayyajula';
+    
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+
+        </div>
+        <div id="footer">
+            Site proudly generated by
+            <a href="http://jaspervdj.be/hakyll">Hakyll</a>
+        </div>
+    </body>
+</html>

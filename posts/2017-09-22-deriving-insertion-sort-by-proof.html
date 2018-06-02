@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <title>Deriving insertion sort by proof</title>
+        <link rel="stylesheet" type="text/css" href="../css/default.css" />
+        <link rel="stylesheet" type="text/css" href="../css/syntax.css" />
+        <link rel="shortcut icon" type="image/png" href="../images/haskell-logo.png" />
+        <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body>
+        <div id="header">
+            <div id="logo">
+                <a href="../">Siva Somayyajula</a>
+            </div>
+            <div id="navigation">
+                <a href="../files/resume.pdf">résumé</a>
+                <a href="mailto:sks266@cornell.edu">email</a>
+                <a href="https://github.com/ssomayyajula/">github</a>
+                <a href="https://www.linkedin.com/in/sivasomayyajula">linkedin</a>
+            </div>
+        </div>
+        <div id="content">
+            <h1>Deriving insertion sort by proof</h1>
+<div class="info">
+    Posted on September 22, 2017
+</div>
+<p>If you’ve taken an introduction to computer science course, you’ve probably seen all of the major sorting algorithms, including insertion sort. You’ve also probably seen its proof of correctness which goes into loop invariants and all that.</p>
+<p>However, I was always confused by their presenting the algorithm first and then the proof of correctness, because it seems like the intuition behind the algorithm is inseparable with the reason why it’s correct. To a constructivist like me, they should literally be the same object. That is, we find a proof that for any list, there exists a sorted one, and the computational content of that proof is precisely insertion sort. For more information on this identification of proofs as programs, check out my older post <a href="http://ssomayyajula.github.io/posts/2016-12-25-constructivism-automated-deduction-and-you.html">here</a>.</p>
+<p>That’s why in this post, we’re going to go through a purely proof-based presentation of lists and their properties with <a href="http://leanprover.github.io/">Lean</a>, Microsoft Research’s new theorem prover. This will lead to a formally verified implementation of insertion sort. This post assumes the reader has <em>some</em> experience with functional programming, automated proofs, and their interactions (propositions-as-types/proofs-as-programs, proof tactics, etc.).</p>
+<p>Before we dive head first into Lean, let’s take a step back and figure out what we need to specify “for any list, there exists a sorted one.” At first glance, it seems like we only need a way of asserting that a list is sorted. However, that’s not strong enough—what if our algorithm returns any old sorted list, that may or may not have the same elements as the original? That’s why we also need a way of saying “the sorted list has the same elements as the original.” Let’s go ahead and specify that first.</p>
+<p>We drop into Lean’s namespace for lists and fix ourselves a universe and type for elements.</p>
+<pre class="lean"><code>namespace list
+
+universe u
+variable {α : Type u}</code></pre>
+<p>Since the Lean standard library has a subset relation over lists, we can just say two lists have the same elements iff they’re subsets (sublists?) of each other.</p>
+<pre class="lean"><code>protected def equiv (l₁ l₂ : list α) := l₁ ⊆ l₂ ∧ l₂ ⊆ l₁
+infix ` ≃ `:50 := list.equiv</code></pre>
+<p>Naturally, “having the same elements” is an equivalence relation, whose proof we derive from the fact that the subset relation is a partial order.</p>
+<pre class="lean"><code>@[refl, simp] lemma equiv.refl (l : list α) : l ≃ l :=
+⟨by simp, by simp⟩
+
+@[symm] lemma equiv.symm {l₁ l₂ : list α} : l₁ ≃ l₂ → l₂ ≃ l₁ :=
+and.symm
+
+@[trans] lemma equiv.trans {l₁ l₂ l₃ : list α} : l₁ ≃ l₂ → l₂ ≃ l₃ → l₁ ≃ l₃
+| ⟨x, y⟩ ⟨z, w⟩ := ⟨subset.trans x z, subset.trans w y⟩</code></pre>
+<p>Tagging each lemma with attributes will help the simplify tactic and us when we do proofs by equational reasoning later on. Now, we’re ready to define what it means for a list to be sorted—it is simply a proposition saying that given <span class="math inline">\([x_1,\ldots,x_n]\)</span>, <span class="math inline">\(x_1\leq x_2\leq\ldots\leq x_n\)</span>. We proceed by induction on a list, with <code>nil</code> and singletons being trivially sorted.</p>
+<pre class="lean"><code>def sorted [has_le α] : list α → Prop
+| (a :: b :: t) := a ≤ b ∧ sorted (b :: t)
+| _             := true</code></pre>
+<p>Now let’s see if we can prove our original claim by induction given a decidable linear order i.e. a comparator, using subtypes to represent existentials.</p>
+<pre class="lean"><code>def insertion_sort [decidable_linear_order α] (l₁ : list α) :
+  {l₂ // l₁ ≃ l₂ ∧ sorted l₂} :=
+begin
+  induction l₁ with h t₁ ih,
+    existsi nil, simp,
+    cases ih with t₂ ih, cases ih with e s,
+    ...</code></pre>
+<p>Producing a sorted version of <code>nil</code> is trivial, as the simplifier fills in the obligations for equivalence and sortedness. However, we get stuck on the inductive step. Given a sorted version of the tail <span class="math inline">\(t_1\)</span> called <span class="math inline">\(t_2\)</span>, how can we produce a sorted version of the entire list, that is, including the head <span class="math inline">\(h\)</span>? We can’t just <code>cons</code> it on, after all. Different proofs—and therefore algorithms—can do different things, but this is where we specialize to insertion sort. We just need to find a way of inserting the head into the tail while preserving sortedness and all the old elements. Formally, we express this as follows.</p>
+<pre class="lean"><code>def insert_le [decidable_linear_order α] (a : α) (l₁) :
+  sorted l₁ → {l₂ // a :: l₁ ≃ l₂ ∧ sorted l₂} :=
+begin
+  intro s₁,
+  induction l₁ with h t₁ ih,
+    existsi ([a]), simp,
+    ...</code></pre>
+<p>Here, <span class="math inline">\(a\)</span> is the element to be inserted. Note that the proposition <span class="math inline">\(a :: l_1\simeq l_2\)</span> is a compact way of saying “the output is equivalent to the input, but it includes <code>a</code>,” as desired. Now, onto the proof—the base case, inserting <span class="math inline">\(a\)</span> into <code>nil</code>, is trivial due to the simplify tactic. The hard part again is the inductive step. However, since we have a decidable linear order, we can decide whether <span class="math inline">\(a\leq h\)</span> or <span class="math inline">\(h\leq a\)</span>.</p>
+<pre class="lean"><code>    ...
+    by_cases a ≤ h with hleq,
+      existsi a :: h :: t₁, exact ⟨by refl, hleq, s₁⟩,
+      ...</code></pre>
+<p>If the former holds, then the proof becomes quite easy: we can just cons the element onto the head <span class="math inline">\(h\)</span> and tail <span class="math inline">\(t_1\)</span> and we immediately have <span class="math inline">\(a::h::t_1\simeq a::h::t_1\)</span> and <span class="math inline">\(a\leq h\leq^* t_1\)</span>. The hard (and recursive) part is when the latter is true. We appeal to the inductive hypothesis <span class="math inline">\(ih\)</span> to insert <span class="math inline">\(a\)</span> somewhere in <span class="math inline">\(t_1\)</span> along with evidence that the result is in fact sorted and that all the old elements are still in place. However, <span class="math inline">\(ih\)</span> naturally expects <span class="math inline">\(t_1\)</span> to be sorted, so we somehow have to extract this information from the fact that <span class="math inline">\(h::t_1\)</span> is sorted.</p>
+<pre class="lean"><code>lemma sorted_tl [has_le α] {h : α} {t} : sorted (h :: t) → sorted t :=
+λ s, by {cases t, trivial, exact s.right}</code></pre>
+<p>Now we may continue.</p>
+<pre class="lean"><code>      ...
+      cases ih (sorted_tl s₁) with t₂ p, cases p with e s₂,
+      existsi h :: t₂, apply and.intro,
+      ...</code></pre>
+<p>Essentially, we insert <span class="math inline">\(a\)</span> somewhere in the tail and return it with the head stuck back on. Sounds a bit gruesome, but computer science was never easy. Now, we have two proof obligations: <span class="math inline">\(a :: h :: t₁\simeq h :: t₂\)</span> and that <span class="math inline">\(h::t_2\)</span> is sorted. The latter makes sense to prove, but the former is a bit weird: since <span class="math inline">\(a\in t_2\)</span>, we are expressing the fact that <span class="math inline">\(t_1\)</span> and <span class="math inline">\(t_2\)</span> have the same elements modulo <span class="math inline">\(a\)</span>. We can largely “ignore” <span class="math inline">\(h\)</span> since it appears on both sides of the equation. To attack the first, we need three lemmas.</p>
+<pre class="lean"><code>lemma cons_equiv_cons {l₁ l₂} (a : α) : l₁ ≃ l₂ → a :: l₁ ≃ a :: l₂
+| ⟨x, y⟩ := ⟨cons_subset_cons a x, cons_subset_cons a y⟩
+
+lemma cons_subset_comm {a b : α} {l₁ l₂} :
+  l₁ ⊆ l₂ → a :: b :: l₁ ⊆ b :: a :: l₂ :=
+λ h _ m, match m with
+| or.inl is_a           := or.inr (or.inl is_a)
+| or.inr (or.inl is_b)  := or.inl is_b
+| or.inr (or.inr in_l₁) := or.inr (or.inr (h in_l₁))
+end
+
+lemma cons_equiv_comm {a b : α} {l₁ l₂} :
+  l₁ ≃ l₂ → a :: b :: l₁ ≃ b :: a :: l₂
+| ⟨x, y⟩ := ⟨cons_subset_comm x, cons_subset_comm y⟩</code></pre>
+<p>These each capture the behavior of “having the same elements;” in particular, the relation is invariant under <code>cons</code>ing arbitrary elements and permutation. Now, we can proceed by a <em>calculational proof</em> i.e. equational reasoning.</p>
+<pre class="lean"><code>      ...
+      calc
+        a :: h :: t₁ ≃ h :: a :: t₁ : cons_equiv_comm (by refl)
+                 ... ≃ h :: t₂      : cons_equiv_cons h e,
+      ...</code></pre>
+<p><span class="math inline">\(ih\)</span> actually tells us that <span class="math inline">\(a::t_1\simeq t_2\)</span> since it took care of insertion, so it is up to us to permute the elements <span class="math inline">\(a\)</span> and <span class="math inline">\(h\)</span> and reduce it to its component witnessing that fact, called <span class="math inline">\(e\)</span>. Now, we can attack the latter obligation, which took me a while to think about. The difficulty is: we do not have a direct way of expressing <span class="math inline">\(h::t_1\)</span> is sorted, since the definition of <span class="math inline">\(sorted\)</span> pattern matches on at least two <code>cons</code>ed elements. Intuitively though, we know <span class="math inline">\(h::t\)</span> is sorted if <span class="math inline">\(t\)</span> is sorted and <span class="math inline">\(h\)</span> is the least element of <span class="math inline">\(h::t\)</span>, so let’s go ahead and prove that.</p>
+<pre class="lean"><code>lemma sorted_cons [has_le α] {h : α} {t} :
+  sorted t → (∀ {a}, a ∈ t → h ≤ a) → sorted (h :: t) :=
+begin
+  intros _ f,
+  cases t,
+    trivial,
+    apply and.intro,
+    exact f (or.inl (by refl)),
+    assumption
+end</code></pre>
+<p>I like how simple this proof turned out: if the tail is <code>nil</code>, then it’s trivially sorted, or else <span class="math inline">\(t\equiv h'::t'\)</span> and we have to show <span class="math inline">\(h\leq h'\)</span> and that <span class="math inline">\(t\)</span> is sorted. The latter we know by assumption, and the former we know from the fact that <span class="math inline">\(h\)</span> is the least element of <span class="math inline">\(h::t\)</span>. We have one last lemma to prove, which is almost the converse of the above; that is, if <span class="math inline">\(h::t\)</span> is sorted, then <span class="math inline">\(h\)</span> is its least element.</p>
+<pre class="lean"><code>lemma sorted_least_elem [weak_order α] {h : α} {t} :
+  sorted (h :: t) → ∀ {a}, a ∈ t → h ≤ a :=
+begin
+  intros s _ m,
+  induction t with h' t' ih generalizing h,
+    exact absurd m (not_mem_nil a),
+    cases m with is_h' in_t',
+      rw is_h', exact s.left,
+      exact le_trans s.left (ih in_t' s.right)
+end</code></pre>
+<p>This directly follows from the transitivity of a weak order (whose existence is implied by a decidable linear order). Now, we’re ready to finish <code>insert_le.</code></p>
+<pre class="lean"><code>      ...
+      exact sorted_cons s₂ (λ _ m,
+      match e.right m with
+      | or.inl is_a  := by {rw is_a, exact le_of_not_le hleq}
+      | or.inr in_t₁ := sorted_least_elem s₁ in_t₁
+      end)
+end</code></pre>
+<p>There’s a lot to unpack here; recall we’re in the <span class="math inline">\(\lnot(a\leq h)\)</span> branch of the proof. In order to show that <span class="math inline">\(h::t_2\)</span> is sorted, we had to show that <span class="math inline">\(t_2\)</span> is sorted and that <span class="math inline">\(h\)</span> is its least element. The former we know by <span class="math inline">\(ih\)</span>, the latter took some work: we have to show for any <span class="math inline">\(x\in t_2\)</span>, <span class="math inline">\(h\leq x\)</span>. However, notice that we know <span class="math inline">\(a::t_1\simeq t_2\)</span>. Thus, it is sufficient to show <span class="math inline">\(h\leq^*a :: t_1\)</span>, which is not hard! If <span class="math inline">\(x=a\)</span>, then we have <span class="math inline">\(h\leq x\)</span>, since <span class="math inline">\(\lnot(a\leq h)\implies h\leq a\)</span>. Otherwise <span class="math inline">\(x\in t_1\)</span>; we know <span class="math inline">\(h::t_1\)</span> by assumption, so we take advantage of the fact that <span class="math inline">\(h\)</span> is the least element of <span class="math inline">\(t_1\)</span>, so clearly <span class="math inline">\(h\leq x\)</span>. Now let’s finally finish insertion sort!</p>
+<pre class="lean"><code>    ...
+    cases (insert_le h t₂ s) with l₂ pf, cases pf with _ _,
+    existsi l₂, apply and.intro,
+    calc
+      h :: t₁ ≃ h :: t₂ : cons_equiv_cons h e
+          ... ≃ l₂      : by assumption,
+    assumption
+end
+
+end list</code></pre>
+<p>As we figured out a few paragraphs ago, we just insert the head somewhere in the sorted tail, and we automatically get the sortedness guarantee. However, we also had to do a little calculational proof showing that <code>insert_le</code> didn’t drop or add any extraneous elements except for <span class="math inline">\(h\)</span>. Let’s go ahead and run this proof! Or program, because they’re one and the same.</p>
+<pre class="lean"><code>#eval list.insertion_sort [91, 60, 41, 65, 66, 84, 85, 82, 95, 83,
+                           38,  4, 65, 34, 36, 89, 42, 86,  9, 25]</code></pre>
+<p>Running Lean in VS Code will give the following message as output, and quite quickly too! The best part though, is that we know for sure that the output is correct.</p>
+<pre><code>[4, 9, 25, 34, 36, 38, 41, 42, 60, 65, 65, 66, 82, 83, 84, 85, 86, 89, 91, 95]</code></pre>
+<p>To close, verified software engineering is the <em>future</em>™ (if my last three posts didn’t make that clear), and the breadth of sophisticated tools like Lean has been crucial in making this new workflow a lot less painful.</p>
+<p>The source code for this post is available <a href="https://gist.github.com/ssomayyajula/dae03a58842c92ac0173702a5d1efad4">here</a>.</p>
+<p><em>P.S.: After hopping between Coq &amp; Agda, Lean has been really fun to use. Plus, I’d be remiss if I didn’t mention the fantastic folks over at the <a href="https://groups.google.com/forum/#!forum/lean-user">Lean user group</a> who helped me out with this post!</em></p>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    /* * * CONFIGURATION VARIABLES * * */
+    var disqus_shortname = 'ssomayyajula';
+    
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+
+        </div>
+        <div id="footer">
+            Site proudly generated by
+            <a href="http://jaspervdj.be/hakyll">Hakyll</a>
+        </div>
+    </body>
+</html>

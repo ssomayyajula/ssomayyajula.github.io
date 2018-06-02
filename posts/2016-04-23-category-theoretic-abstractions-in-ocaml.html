@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <title>Category-theoretic abstractions with OCaml</title>
+        <link rel="stylesheet" type="text/css" href="../css/default.css" />
+        <link rel="stylesheet" type="text/css" href="../css/syntax.css" />
+        <link rel="shortcut icon" type="image/png" href="../images/haskell-logo.png" />
+        <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body>
+        <div id="header">
+            <div id="logo">
+                <a href="../">Siva Somayyajula</a>
+            </div>
+            <div id="navigation">
+                <a href="../files/resume.pdf">résumé</a>
+                <a href="mailto:sks266@cornell.edu">email</a>
+                <a href="https://github.com/ssomayyajula/">github</a>
+                <a href="https://www.linkedin.com/in/sivasomayyajula">linkedin</a>
+            </div>
+        </div>
+        <div id="content">
+            <h1>Category-theoretic abstractions with OCaml</h1>
+<div class="info">
+    Posted on April 23, 2016
+</div>
+<p>Software engineering with imperative and object-oriented programming languages often utilizes certain <em>design patterns</em>: <a href="https://www.quora.com/What-are-some-functional-programming-design-patterns/answer/Tikhon-Jelvis?srid=TnTB">templates so abstract that they can’t be encoded as a library</a>. Functional programming, on the other hand, is famous for translating concepts in category theory to concrete programmatic abstractions that scale well for a lot of problems. In my opinion, the most basic “pattern” is <code>Functor-Applicative-Monad</code>, a hierarchy for generalizing function application and composition. While that sounds quite abstract, this hierarchy allows us to encode such concepts as error handling and stateful computation. Personally, I’ve used some combination of <code>Functor-Applicative-Monad</code> in <em>every</em> Haskell project I’ve worked on.</p>
+<p>But this post isn’t about Haskell; in fact, we’ll start with a discussion of the category theory behind <code>Functor-Applicative-Monad</code>, their respective implementations in OCaml, and the practicality of these abstractions. Why OCaml? Such abstractions aren’t typically used in favor of more <em>ad hoc</em> ones and using the module system as opposed to Haskell’s open typeclasses pose an interesting challenge. In an effort to be as self-contained as possible, this post only assumes knowledge of set theory and basic OCaml.</p>
+<p>So let’s dive in. Abstract algebra deals with such structures as groups, rings, and fields that are, in general terms, sets endowed with operations between their elements. Category theory generalizes this notion with the <em>category</em>. We’ll use Spivak’s definition from <a href="http://math.mit.edu/~dspivak/teaching/sp13/CT4S.pdf"><em>Category Theory for Scientists</em></a>.</p>
+<p>A <em>category</em> <em>C</em> consists of:</p>
+<ol style="list-style-type: decimal">
+<li><p>A set of <em>objects</em> Ob(<em>C</em>)</p></li>
+<li><p>A collection Hom<sub><em>C</em></sub>: ∀<em>X</em>, <em>Y</em> ∈ Ob(<em>C</em>), Hom<sub><em>C</em></sub>(<em>X</em>, <em>Y</em>) is the set of all <em>morphisms</em> <em>f :</em> <em>X</em> → <em>Y</em>.</p></li>
+<li><p>An <em>associative</em> function ∘ : Hom<sub><em>C</em></sub>(<em>Y</em>, <em>Z</em>) × Hom<sub><em>C</em></sub>(<em>X</em>, <em>Y</em>) → Hom<sub><em>C</em></sub>(<em>X</em>, <em>Z</em>) that obeys the following <em>identity law</em>: ∀<em>X</em>, <em>Y</em> ∈ Ob(<em>C</em>), ∀<em>f</em> ∈ Hom<sub><em>C</em></sub>(<em>X</em>, <em>Y</em>), ∃<em>id</em><sub><em>X</em></sub> ∈ Hom<sub><em>C</em></sub>(<em>X</em>, <em>X</em>), <em>id</em><sub><em>Y</em></sub> ∈ Hom<sub><em>C</em></sub>(<em>Y</em>, <em>Y</em>): <em>id</em><sub><em>Y</em></sub> ∘ <em>f</em> = <em>f</em> ∘ <em>id</em><sub><em>X</em></sub> = <em>f</em> where <em>id</em><sub><em>X</em></sub> and <em>id</em><sub><em>Y</em></sub> are <em>identity morphisms</em>.</p></li>
+</ol>
+<p>The conditions for ∘ in (3) are known as the <em>coherence conditions</em> for categories.</p>
+<p>Categories are so primitive that morphisms have no concept of functions or function application—only specific categories do. For example, <strong>Set</strong> is the category where objects are sets, morphisms are functions (on sets), and ∘ is standard function composition. However, <a href="http://mathoverflow.net/a/119925">here’s</a> a category where morphisms are <em>not</em> functions.</p>
+<p>In OCaml, we work in the <a href="https://ncatlab.org/nlab/show/syntactic+category"><em>syntactic category</em></a> <strong>OCat</strong> of OCaml types and the functions between them.</p>
+<ol style="list-style-type: decimal">
+<li><p>Ob(<strong>OCat</strong>) = all OCaml types <em>of kind</em> <code>*</code></p></li>
+<li><p>∀<code>'a</code>, <code>'b</code> ∈ Ob(<strong>OCat</strong>), Hom<sub><strong>OCat</strong></sub>(<code>'a</code>, <code>'b</code>) = all <code>f: 'a -&gt; 'b</code></p></li>
+<li><p><code>let id x = x</code> is the identity morphism for all types because it is polytypic i.e. since its type is <code>'a -&gt; 'a</code>, it will take on the type of the value it’s called on.</p></li>
+<li><p><code>let (%) f g x = f (g x)</code> is ∘ i.e. function composition</p></li>
+</ol>
+<p>The proofs of satisfying the coherence conditions for categories are trivial. The last part of (1) is important if you do not know about type kinds—just like values have types, types have “types” called <em>kinds</em>. Types of kind <code>*</code> refer to concrete types like <code>int</code>, type variables like <code>'a</code> and <code>'b</code>, or an arbitrary function type <code>'a -&gt; 'b</code>. On the other hand, there are complex types i.e. <em>type constructors</em> like <code>option</code> and <code>list</code> which have kind <code>* -&gt; *</code> because they will return a type of kind <code>*</code> upon being applied to a type of kind <code>*</code> e.g. <code>'a option : *</code> and <code>int list : *</code>. In that sense, type constructors act as functions at the type level. We will exploit this difference later on.</p>
+<p>Back to theory. The idea of structure-preserving maps is prevalent in algebra through the homomorphism, so the corresponding idea in category theory is the <em>functor</em>: a map <em>F</em> that assigns objects and morphisms from a category <em>C</em> to those in <em>D</em> while preserving identity morphisms and composition. In mathematical terms, it consists of two functions whose signatures are defined in terms of arbitrary objects <em>X</em> and <em>Y</em> in <em>C</em>:</p>
+<ol style="list-style-type: decimal">
+<li>Ob(<em>F</em>): Ob(<em>C</em>) → Ob(<em>D</em>)</li>
+<li>Hom<sub><em>F</em></sub>(<em>X</em>, <em>Y</em>): Hom<sub><em>C</em></sub>(<em>X</em>, <em>Y</em>) → Hom<sub><em>D</em></sub>(<em>F</em>(<em>X</em>), <em>F</em>(<em>Y</em>))</li>
+</ol>
+<p>The aforementioned coherence conditions for functors are as follows with respect to arbitrary morphisms <em>f</em>: <em>Y</em> → <em>Z</em> and <em>g</em>: <em>X</em> → <em>Y</em> in <em>C</em>. For simplicity, we denote both functions by <em>F</em>.</p>
+<ol style="list-style-type: decimal">
+<li><em>F</em>(<em>id</em><sub><em>X</em></sub>) = <em>id</em><sub><em>F</em>(<em>X</em>)</sub></li>
+<li><em>F</em>(<em>f</em> ∘ <em>g</em>) = <em>F</em>(<em>f</em>) ∘ <em>F</em>(<em>g</em>)</li>
+</ol>
+<p>Since <strong>OCat</strong> is the “universal” category in OCaml, we can only write functors from <strong>OCat</strong> to <strong>OCat</strong>. One example is the <em>identity functor</em> that assigns all types (objects) and functions (morphisms) to themselves, so it trivially preserves identities and composition. However, we can get more interesting functors if we look at <em>subcategories</em> of <strong>OCat</strong>, categories whose objects and morphisms are subsets of those in <strong>OCat</strong> and are closed under composition and identity. Consider the following module type <code>AT</code>.</p>
+<div class="sourceCode"><pre class="sourceCode ocaml"><code class="sourceCode ocaml"><span class="ot">module</span> <span class="kw">type</span> <span class="dt">AT</span> = <span class="kw">sig</span>
+  <span class="kw">type</span> 'a t
+<span class="kw">end</span></code></pre></div>
+<p>Turns out that defining a module <code>M : AT</code> induces a subcategory of <strong>OCat</strong>, <strong>M</strong>, such that:</p>
+<ol style="list-style-type: decimal">
+<li><p>Ob(<strong>M</strong>) = {<code>'a M.t</code> | <code>'a</code> ∈ Ob(<strong>OCat</strong>)}</p></li>
+<li><p>Hom<sub><strong>M</strong></sub>(<code>'a M.t</code>, <code>'b M.t</code>) = all <code>f: 'a M.t -&gt; 'b M.t</code></p></li>
+<li><p><code>id</code> and <code>(%)</code> remain as they are polytypic.</p></li>
+</ol>
+<p>We can then define functors from <strong>OCat</strong> to <strong>M</strong> that intuitively “promote” vanilla types and functions into their equivalent “specialized” ones while remaining in (a subcategory of) <strong>OCat</strong>. To induce such functors in OCaml, we have to split their signature into two function signatures mapping types and functions, respectively. Remember how we said type constructors were kind of like functions on types? Turns out the first function’s signature will be the <em>type</em> of the type constructor <code>M.t</code>, namely the <em>kind</em> <code>* -&gt; *</code>. The signature of the second function follows directly from specializing the general signature to OCaml types, since <em>F</em>(<code>'a</code>) = <code>'a t</code>, Hom<sub><strong>OCat</strong></sub>(<code>'a</code>, <code>'b</code>) = <code>'a -&gt; 'b</code>, and Hom<sub><strong>M</strong></sub>(<em>F</em>(<code>'a</code>), <em>F</em>(<code>'b</code>)) = <code>'a t -&gt; 'b t</code>.</p>
+<ol style="list-style-type: decimal">
+<li><p>Ob(<em>F</em>): <code>* -&gt; *</code></p></li>
+<li><p>Hom<sub><em>F</em></sub>(<code>'a</code>, <code>'b</code>): <code>('a -&gt; 'b) -&gt; ('a t -&gt; 'b t)</code></p></li>
+</ol>
+<p>Since we’re dealing with function signatures, we can package both into a module type <code>FUNCTOR</code> representing modules that induce category-theoretic functors. The first function is actually the abstract type declaration <code>type 'a t</code> from <code>AT</code>, and we’ll call the second function <code>fmap</code> for “function map.”</p>
+<div class="sourceCode"><pre class="sourceCode ocaml"><code class="sourceCode ocaml"><span class="ot">module</span> <span class="kw">type</span> <span class="dt">FUNCTOR</span> = <span class="kw">sig</span>
+  <span class="ot">include</span> AT
+  <span class="kw">val</span> fmap : ('a -&gt; 'b) -&gt; ('a t -&gt; 'b t)
+<span class="kw">end</span></code></pre></div>
+<p>Thus, for some module <code>M : FUNCTOR</code>, <code>M.fmap</code> must satisfy the following specialization of functor coherence conditions; for <code>f: 'b -&gt; 'c</code> and <code>g: 'a -&gt; 'b</code>:</p>
+<ol style="list-style-type: decimal">
+<li><code>M.fmap id = id</code></li>
+<li><code>M.fmap (f % g) = M.fmap f % M.fmap g</code></li>
+</ol>
+<p>The usefulness of <code>FUNCTOR</code> derives from our original intuition of induced functors promoting vanilla types and functions—in fact, <code>'a M.t</code> gives <em>computational context</em> to values in <code>'a</code>. Then, <code>fmap</code> allows us to, in effect, apply vanilla functions to values within said context.</p>
+<p>Let’s look at an example—while programming, it is often useful to construct errors and regular values in a symmetric way to make throwing errors as non-intrusive as possible. So, we’ll define a type constructor <code>either</code> that partitions errors into one variant and values into another. In other words, the <code>('a, 'b) either</code> type lends vanilla values a computational context where error values are also possible.</p>
+<div class="sourceCode"><pre class="sourceCode ocaml"><code class="sourceCode ocaml"><span class="kw">type</span> ('a, 'b) either = <span class="dt">Left</span> <span class="kw">of</span> 'a | <span class="dt">Right</span> <span class="kw">of</span> 'b</code></pre></div>
+<p>By convention, <code>Left</code> values are errors, so creating a module <code>Either : AT</code> given a user-defined type for <code>Left</code> values would parameterize over the type of <code>Right</code> values and induce a subcategory <strong>Either</strong> where functions operate on values of <code>(L.t, 'a) either</code>. Notice that we exposed the implementation of the type <code>'a Either(L).t</code> using a <code>with</code> clause so that we can work with concrete values of <code>(L.t, 'a) either</code>.</p>
+<div class="sourceCode"><pre class="sourceCode ocaml"><code class="sourceCode ocaml"><span class="ot">module</span> <span class="kw">type</span> <span class="dt">T</span> = <span class="kw">sig</span>
+  <span class="kw">type</span> t
+<span class="kw">end</span>
+
+<span class="ot">module</span> Either (<span class="dt">L</span> : <span class="dt">T</span>) : <span class="dt">AT</span>
+  <span class="kw">with</span> <span class="kw">type</span> 'a t = (L<span class="kw">.</span>t, 'a) either = <span class="kw">struct</span>
+  
+  <span class="kw">type</span> 'a t = (L<span class="kw">.</span>t, 'a) either
+<span class="kw">end</span></code></pre></div>
+<p>The reason we parameterized over the type of <code>Right</code> values was so we can define a functor from <strong>OCat</strong> to <strong>Either</strong> whose <code>fmap</code> component will, upon being applied to a vanilla function, return a promoted function that returns errors as-is or applies the vanilla function to the internal value held by <code>Right</code>. Let’s make an OCaml functor <code>EitherFunctor : FUNCTOR</code> to get this definition of <code>fmap</code>. Again, since we’re parameterizing over the type of <code>Right</code> values, we have to leave the type of <code>Left</code> values defined by user-created modules.</p>
+<div class="sourceCode"><pre class="sourceCode ocaml"><code class="sourceCode ocaml"><span class="ot">module</span> EitherFunctor (<span class="dt">L</span> : <span class="dt">T</span>) : <span class="dt">FUNCTOR</span>
+  <span class="kw">with</span> <span class="kw">type</span> 'a t = 'a <span class="dt">Either</span> (<span class="dt">L</span>).t = <span class="kw">struct</span>
+  
+  <span class="ot">include</span> Either (<span class="dt">L</span>)
+  
+  <span class="kw">let</span> fmap f = <span class="kw">function</span>
+      <span class="dt">Left</span> x <span class="kw">as</span> e -&gt; e
+    | <span class="dt">Right</span> v     -&gt; <span class="dt">Right</span> (f v)
+<span class="kw">end</span></code></pre></div>
+<p>The proofs that this definition of <code>fmap</code> satisfies the coherence conditions for functors is a straightforward exercise of case analysis. For convenience, we’ll define a module that deals with string errors.</p>
+<div class="sourceCode"><pre class="sourceCode ocaml"><code class="sourceCode ocaml"><span class="ot">module</span> String = <span class="kw">struct</span>
+  <span class="kw">type</span> t = <span class="dt">string</span>
+<span class="kw">end</span>
+
+<span class="ot">module</span> EitherString = <span class="dt">EitherFunctor</span> (<span class="dt">String</span>)</code></pre></div>
+<p>Let’s try using <code>EitherString</code> in <code>utop</code>.</p>
+<pre><code># open EitherString;;
+# let divide x = function
+    0 -&gt; Left &quot;You tried dividing by zero!&quot;
+  | y -&gt; Right (x / y)
+- : val divide : int -&gt; int -&gt; (string, int) either = &lt;fun&gt;
+# let succ_e = fmap ((+) 1);;
+- : val succ_e : int EitherString.t -&gt; int EitherString.t
+# succ_e (divide 6 2);;
+- : int EitherString.t = Right 4
+# succ_e (divide 1 0);;
+- : int EitherString.t = Left &quot;You tried dividing by zero!&quot;</code></pre>
+<p>Neat, the attempted application of <code>((+) 1)</code> failed and propagated the error from dividing by zero.</p>
+<p>The practicality of functors lies in the ability of <code>fmap</code> to map over structured values in a desirable yet predictable way. This behavior is so ubiquitous that it has been <a href="http://thread.gmane.org/gmane.comp.lang.haskell.libraries/15382/focus=15384">proven</a> only one definition of <code>fmap</code> is possible for any type. This has led the developers of GHC to write an extension <code>DeriveFunctor</code> to automatically derive <code>fmap</code> definitions for Haskell types.</p>
+<p>You might be thinking—why don’t we just use exceptions for dealing with one-time errors like these? The power of this hierarchy lies in using <em>applicative functors</em>, which allow us to elegantly sequence computations so that, in the case of <code>either</code>, computations succeed along the way or errors just get propagated up the call stack. However, in order to implement them, we need to go back to theory again.</p>
+<p>Remember the theme in category theory of generalizing concepts from algebra? Just like the Cartesian product in set theory, a <em>product category</em> <em>C</em> × <em>D</em> is a category where objects and morphisms are pairs of their respective components from <em>C</em> and <em>D</em> and composition is defined pairwise on the components of morphisms.</p>
+<ol style="list-style-type: decimal">
+<li><p>Ob(<em>C</em> × <em>D</em>) = {(<em>X</em>, <em>Y</em>) | <em>X</em> ∈ Ob(<em>C</em>) ∧ <em>Y</em> ∈ Ob(<em>D</em>)}</p></li>
+<li><p>Hom<sub><em>C</em> × <em>D</em></sub>((<em>X</em><sub>1</sub>, <em>Y</em><sub>1</sub>), (<em>X</em><sub>2</sub>, <em>Y</em><sub>2</sub>)) = all (<em>f</em>: <em>X</em><sub>1</sub> → <em>X</em><sub>2</sub>, <em>g</em>:<em>Y</em><sub>1</sub> → <em>Y</em><sub>2</sub>)</p></li>
+<li><p>(<em>f</em><sub>2</sub>: <em>Y</em><sub><em>f</em></sub> → <em>Z</em><sub><em>f</em></sub>, <em>g</em><sub>2</sub>: <em>Y</em><sub><em>g</em></sub> → <em>Z</em><sub><em>g</em></sub>) ∘ (<em>f</em><sub>1</sub>: <em>X</em><sub><em>f</em></sub> → <em>Y</em><sub><em>f</em></sub>, <em>g</em><sub>1</sub>: <em>X</em><sub><em>g</em></sub> → <em>Y</em><sub><em>g</em></sub>) = (<em>f</em><sub>2</sub> ∘ <em>f</em><sub>1</sub>, <em>g</em><sub>2</sub> ∘ <em>g</em><sub>1</sub>) so <em>id</em><sub>(<em>X</em>, <em>Y</em>)</sub> = (<em>id</em><sub><em>X</em></sub>, <em>id</em><sub><em>Y</em></sub>)</p></li>
+</ol>
+<p>This allows us to define a <em>bifunctor</em>: a functor whose domain is a product category, which means it can act on pairs of objects and morphisms.</p>
+<p>Plus, just like monoids in group theory, a <em>monoidal category</em> is a category <em>C</em> endowed with a bifunctor ⊗ : <em>C</em> × <em>C</em> → <em>C</em> and an <em>identity object</em> <em>I</em> subject to the following coherence conditions; for objects <em>X</em>, <em>Y</em>, and <em>Z</em> in <em>C</em>:</p>
+<ol style="list-style-type: decimal">
+<li><em>I</em> ⊗ <em>X</em> ≅ X</li>
+<li><em>X</em> ⊗ <em>I</em> ≅ X</li>
+<li><em>X</em> ⊗ (<em>Y</em> ⊗ <em>Z</em>) ≅ (<em>X</em> ⊗ <em>Y</em>) ⊗ <em>Z</em></li>
+</ol>
+<p><em>A</em> ≅ <em>B</em> means there exists a <a href="https://ncatlab.org/nlab/show/natural+isomorphism"><em>natural isomorphism</em></a> between these objects, i.e. maintains some loose notion of equivalent structure. <a href="http://www.staff.city.ac.uk/~ross/papers/Constructors.pdf">Some monoidal categories preserve structure exactly</a>, though.</p>
+<p>Notice that <strong>OCat</strong> is a monoidal category with <code>'a</code> ⊗ <code>'b</code> = <code>'a * 'b</code> and <em>I</em> = <code>unit</code>. Let’s check that the coherence conditions hold.</p>
+<ol style="list-style-type: decimal">
+<li><p><code>unit * 'a</code> ≅ <code>'a</code> and <code>'a * unit</code> ≅ <code>'a</code> because values <code>((), a) ~ a ~ (a, ())</code> i.e. pairing with <code>unit</code> does not impose any additional structure onto the underlying value <code>a</code>.</p></li>
+<li><p><code>'a * ('b * 'c)</code> ≅ <code>('a * 'b) * 'c</code> because values <code>(a, (b, c)) ~ ((a, b), c)</code> i.e. grouping does not change the underlying triplet <code>(a, b, c)</code>.</p></li>
+</ol>
+<p>It naturally follows that the aforementioned <strong>M</strong> is a monoidal category as well with <code>'a M.t</code> ⊗ <code>'b M.t</code> = <code>'a M.t * 'b M.t</code> and <em>I</em> = <code>unit M.t</code>. This is going to be important in implementing the following definition.</p>
+<p>Now, we’ll look at functors on monoidal categories. A <em>strong monoidal functor</em> is a functor <em>F</em> between monoidal categories (<em>C</em>, ⊗, <em>I</em>) and (<em>D</em>, ⊗’, <em>J</em>) that preserves monoidal structure.</p>
+<ol style="list-style-type: decimal">
+<li><em>J</em> ≅ <em>F</em>(<em>I</em>)</li>
+<li><em>F</em>(<em>X</em>) ⊗’ <em>F</em>(<em>Y</em>) ≅ <em>F</em>(<em>X</em> ⊗ <em>Y</em>)</li>
+<li></li>
+</ol>
+<p>We call such functors strong because we require isomorphisms to exist</p>
+<p>To write lax monoidal functors from <strong>OCat</strong> to <strong>M</strong>, we include signatures for the induced functor <em>F</em> and we specialize the signatures for <em>i</em> and **. To clarify the following definitions, remember ⊗ is the bifunctor defined for <strong>OCat</strong> and ⊗‘is the one for <strong>M</strong> so <em>F</em>(<code>'a</code>) ⊗’ <em>F</em>(<code>'b</code>) = <code>'a t</code> ⊗’ <code>'b t</code> = <code>'a t * 'b t</code> while <em>F</em>(<code>'a</code> ⊗ <code>'b</code>) = <em>F</em>(<code>'a * 'b</code>) = <code>('a * 'b) t</code>.</p>
+<p>However, to simplify function application, <em>i</em>’s signature will be contracted to <code>unit t</code> since in <strong>OCat</strong>, <em>J</em> = <em>F</em>(<em>I</em>). Furthermore, we’ll change <code>'a t * 'b t</code> to <code>'a t -&gt; 'b t</code>.</p>
+<ol style="list-style-type: decimal">
+<li><em>i</em>: <code>unit t</code></li>
+<li>**: <code>'a t -&gt; 'b t -&gt; ('a * 'b) t</code></li>
+</ol>
+<p>Let’s package this into a module type called <code>MONOIDAL</code>.</p>
+<div class="sourceCode"><pre class="sourceCode ocaml"><code class="sourceCode ocaml"><span class="ot">module</span> <span class="kw">type</span> <span class="dt">MONOIDAL</span> = <span class="kw">sig</span>
+  <span class="ot">include</span> FUNCTOR
+  <span class="kw">val</span> i      : <span class="dt">unit</span> t
+  <span class="kw">val</span> ( ** ) : 'a t -&gt; 'b t -&gt; ('a * 'b) t
+<span class="kw">end</span></code></pre></div>
+<p>Let’s create an OCaml functor to induce a lax monoidal functor from <strong>OCat</strong> to <strong>Either</strong>. <em>i</em> is <code>Right ()</code> and ** must essentially combine the results of <code>fmap</code> over both inputs, short-circuiting if the first value was an error.</p>
+<div class="sourceCode"><pre class="sourceCode ocaml"><code class="sourceCode ocaml"><span class="ot">module</span> EitherMonoidal (<span class="dt">L</span> : <span class="dt">T</span>) : <span class="dt">MONOIDAL</span>
+  <span class="kw">with</span> <span class="kw">type</span> 'a t = <span class="dt">EitherFunctor</span> (<span class="dt">L</span>).t = <span class="kw">struct</span>
+  
+  <span class="ot">include</span> EitherFunctor (<span class="dt">L</span>).t
+  
+  <span class="kw">let</span> i = <span class="dt">Right</span> ()
+  
+  <span class="kw">let</span> ( ** ) x y =
+    <span class="kw">match</span> fmap (<span class="kw">fun</span> a b -&gt; (a, b)) x <span class="kw">with</span>
+      <span class="dt">Left</span> _ <span class="kw">as</span> e -&gt; e
+    | <span class="dt">Right</span> f     -&gt; fmap f y
+<span class="kw">end</span></code></pre></div>
+<p>Just like we did for <code>EitherFunctor</code>, we’ll create a convenience module on string errors.</p>
+<div class="sourceCode"><pre class="sourceCode ocaml"><code class="sourceCode ocaml"><span class="ot">module</span> EitherStringMonoidal = <span class="dt">EitherMonoidal</span> (<span class="dt">String</span>)</code></pre></div>
+<p>Now, lax monoidal functors induced by modules of type <code>MONOIDAL</code> aren’t very useful on their own. However, with this structure in place, we can now define an <em>applicative functor</em>, which are simply two functions defined on lax monoidal functors: <em>pure</em>, which promotes values in <strong>OCat</strong> (values of type <code>'a</code>) to those in <strong>M</strong> (values of type <code>'a M.t</code>), and <code>(&lt;*&gt;)</code>, which is almost an extension of <code>fmap</code>; since functions are also values in <code>M.t</code>, A common idiom then is to promote a function, apply it to a value, then rinse and repeat, getting the “sequencing” behavior we wanted earlier.</p>
+<p>We can generate definitions for <em>pure</em> and &lt;*&gt; using an OCaml functor <code>ApplicativeFn</code> (unfortunately, we can’t define these as general functions using first-class modules due to OCaml’s <a href="http://stackoverflow.com/a/35180899">lack of higher-kinded type polymorphism</a>).</p>
+<div class="sourceCode"><pre class="sourceCode ocaml"><code class="sourceCode ocaml"><span class="ot">module</span> ApplicativeFn (<span class="dt">M</span> : <span class="dt">MONOIDAL</span>) : <span class="kw">sig</span>
+  <span class="kw">val</span> pure  : 'a -&gt; 'a M<span class="kw">.</span>t
+  <span class="kw">val</span> (&lt;*&gt;) : ('a -&gt; 'b) M<span class="kw">.</span>t -&gt; ('a M<span class="kw">.</span>t -&gt; 'b M<span class="kw">.</span>t)
+<span class="kw">end</span> = <span class="kw">struct</span>
+  <span class="ot">open</span> M
+  
+  <span class="kw">let</span> pure x = (<span class="kw">fun</span> _ -&gt; x) &lt;$&gt; i
+  
+  <span class="kw">let</span> (&lt;*&gt;) f m = (<span class="kw">fun</span> (f, x) -&gt; f x) &lt;$&gt; (f ** m)
+<span class="kw">end</span></code></pre></div>
+<p>The definition for <code>pure</code> exploits the fact that <code>i</code> is sort of the “trivial value” of <code>M.t</code> which can be used to inject arbitrary values from <strong>OCat</strong>. <code>(&lt;*&gt;)</code> then, in effect, simultaneously checks whether the function <code>f</code> and the value <code>m</code> are errors, unboxes them, then evaluates the function application.</p>
+<p>We can now create a module that</p>
+<p><em>P.S. Purists might complain over these definitions because I purposefully avoided explaining the concept of natural transformations and isomorphisms in favor of a more intuitive approach.</em></p>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    /* * * CONFIGURATION VARIABLES * * */
+    var disqus_shortname = 'ssomayyajula';
+    
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+
+        </div>
+        <div id="footer">
+            Site proudly generated by
+            <a href="http://jaspervdj.be/hakyll">Hakyll</a>
+        </div>
+    </body>
+</html>

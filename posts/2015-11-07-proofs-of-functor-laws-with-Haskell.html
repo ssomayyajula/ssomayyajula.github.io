@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <title>Proofs of functor laws in Haskell</title>
+        <link rel="stylesheet" type="text/css" href="../css/default.css" />
+        <link rel="stylesheet" type="text/css" href="../css/syntax.css" />
+        <link rel="shortcut icon" type="image/png" href="../images/haskell-logo.png" />
+        <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body>
+        <div id="header">
+            <div id="logo">
+                <a href="../">Siva Somayyajula</a>
+            </div>
+            <div id="navigation">
+                <a href="../files/resume.pdf">résumé</a>
+                <a href="mailto:sks266@cornell.edu">email</a>
+                <a href="https://github.com/ssomayyajula/">github</a>
+                <a href="https://www.linkedin.com/in/sivasomayyajula">linkedin</a>
+            </div>
+        </div>
+        <div id="content">
+            <h1>Proofs of functor laws in Haskell</h1>
+<div class="info">
+    Posted on November  7, 2015
+</div>
+<p>Haskell defines a typeclass <a href="https://wiki.haskell.org/Functor"><code>Functor</code></a> containing a function <code>fmap</code> which allows developers to apply a function over the contents of an instance without changing the actual structure of the data (note that this is roughly equivalent to the formal definition of a functor). To achieve this guarantee, instances of <code>Functor</code> must obey the following two laws where <code>fmap :: (a -&gt; b) -&gt; f a -&gt; f b</code>, <code>id :: a -&gt; a</code>, <code>f :: b -&gt; c</code>, and <code>g :: a -&gt; b</code>:</p>
+<ol style="list-style-type: decimal">
+<li><code>fmap id == id</code></li>
+<li><code>fmap (f . g) == (fmap f . fmap g)</code></li>
+</ol>
+<p>Proving these laws on different instances is a useful exercise, especially when you come up with your own instance for an arbitrary data structure and you need to verify that it is correct, so let’s prove them on two instances of <code>Functor</code>: <code>Maybe a</code> and <code>[a]</code>. For all the non-Haskellers out there, the former is a data structure that implements nullable values of <code>a</code>, and the latter is a list of <code>a</code>’s.</p>
+<h2 id="nullable-values-the-maybe-a-functor">Nullable values: The <code>Maybe a</code> functor</h2>
+<p>A value of <code>Maybe a</code> is either <code>Just a</code> or <code>Nothing</code>; the instance should allow us to apply a function on either <code>a</code> in <code>Just a</code> or fail silently on <code>Nothing</code> without changing anything else. Therefore, <code>fmap</code> is defined as the following.</p>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">instance</span>  <span class="dt">Functor</span> <span class="dt">Maybe</span>  <span class="kw">where</span>
+    fmap _ <span class="dt">Nothing</span>       <span class="fu">=</span> <span class="dt">Nothing</span>       (<span class="dv">1</span>)
+    fmap f (<span class="dt">Just</span> a)      <span class="fu">=</span> <span class="dt">Just</span> (f a)    (<span class="dv">2</span>)</code></pre></div>
+<p>These proofs are fairly straightforward and follow the common theme of considering either case of <code>Maybe a</code>.</p>
+<h3 id="proof-of-the-first-law">Proof of the first law</h3>
+<p><strong>Claim</strong>: <em>On</em> <code>m</code> <em>of</em> <code>Maybe a</code>, <code>fmap id m == id m</code>.</p>
+<p><em>Proof</em>. On cases of <code>m</code>.</p>
+<p><em><strong>Case 1</strong></em>: <code>m == Nothing</code>.</p>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">fmap id m <span class="fu">==</span> fmap id <span class="dt">Nothing</span> <span class="co">{- by expansion of m -}</span>
+          <span class="fu">==</span> <span class="dt">Nothing</span>         <span class="co">{- by fmap (1) -}</span>
+          <span class="fu">==</span> id m            <span class="co">{- by definition of id, m -}</span></code></pre></div>
+<p><em><strong>Case 2</strong></em>: <code>m == Just a</code>.</p>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">fmap id m <span class="fu">==</span> fmap id (<span class="dt">Just</span> a) <span class="co">{- by expansion of m -}</span>
+          <span class="fu">==</span> <span class="dt">Just</span> (id a)      <span class="co">{- by fmap (2) -}</span>
+          <span class="fu">==</span> <span class="dt">Just</span> a           <span class="co">{- by expansion of id -}</span>
+          <span class="fu">==</span> m                <span class="co">{- by definition of m -}</span>
+          <span class="fu">==</span> id m             <span class="co">{- by definition of id -}</span> ∎</code></pre></div>
+<h3 id="proof-of-the-second-law">Proof of the second law</h3>
+<p><strong>Claim</strong>: <em>On</em> <code>m</code> <em>of</em> <code>Maybe a</code>, <code>fmap (f . g) m == (fmap f . fmap g) m</code>.</p>
+<p><em>Proof</em>. On cases of <code>m</code>.</p>
+<p><em><strong>Case 1</strong></em>: <code>m == Nothing</code>.</p>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">fmap (f <span class="fu">.</span> g) m <span class="fu">==</span> fmap (f <span class="fu">.</span> g) <span class="dt">Nothing</span>
+                      <span class="co">{- by expansion of m -}</span>
+               <span class="fu">==</span> <span class="dt">Nothing</span>
+                      <span class="co">{- by fmap (1) -}</span></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">(fmap f <span class="fu">.</span> fmap g) m <span class="fu">==</span> fmap f (fmap g <span class="dt">Nothing</span>)
+                           <span class="co">{- by expansion of (.) and m -}</span>
+                    <span class="fu">==</span> fmap f <span class="dt">Nothing</span>
+                           <span class="co">{- by fmap (1) -}</span>
+                    <span class="fu">==</span> <span class="dt">Nothing</span>
+                           <span class="co">{- by fmap (1) -}</span></code></pre></div>
+<p><em><strong>Case 2</strong></em>: <code>m == Just a</code>.</p>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">fmap (f <span class="fu">.</span> g) m <span class="fu">==</span> fmap (f <span class="fu">.</span> g) (<span class="dt">Just</span> a)
+                      <span class="co">{- by expansion of m -}</span>
+               <span class="fu">==</span> <span class="dt">Just</span> ((f <span class="fu">.</span> g) a)
+                      <span class="co">{- by fmap (2) -}</span></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">(fmap f <span class="fu">.</span> fmap g) m <span class="fu">==</span> fmap f (fmap g (<span class="dt">Just</span> a))
+                           <span class="co">{- by expansion of (.), m -}</span>
+                    <span class="fu">==</span> fmap f (<span class="dt">Just</span> (g a))
+                           <span class="co">{- by fmap (2) -}</span>
+                    <span class="fu">==</span> <span class="dt">Just</span> (f (g a))
+                           <span class="co">{- by fmap (2) -}</span>
+                    <span class="fu">==</span> <span class="dt">Just</span> ((f <span class="fu">.</span> g) a)
+                           <span class="co">{- by definition of (.) -}</span></code></pre></div>
+<p>Therefore, <code>fmap (f . g) m == (fmap f . fmap g) m</code> in all cases. ∎</p>
+<h2 id="lists-the-a-functor">Lists: The <code>[a]</code> functor</h2>
+<p>The <code>[a]</code> functor should allow us to apply a function to every element of a list without changing anything else. Thus, <code>fmap = map</code>, which is defined as the following.</p>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">map<span class="ot"> ::</span> (a <span class="ot">-&gt;</span> b) <span class="ot">-&gt;</span> [a] <span class="ot">-&gt;</span> [b]
+map _ []     <span class="fu">=</span> []                (<span class="dv">1</span>)
+map f (x<span class="fu">:</span>xs) <span class="fu">=</span> f x <span class="fu">:</span> map f xs    (<span class="dv">2</span>)</code></pre></div>
+<p>The proofs here are a bit harder since lists have infinitely many cases to consider, so we must turn to induction.</p>
+<h3 id="proof-of-the-first-law-1">Proof of the first law</h3>
+<p><strong>Claim</strong>: <em>On a list</em> <code>l</code>, <code>fmap id l == id l</code>.</p>
+<p><em>Proof</em>. By induction on the length of <code>l</code>.</p>
+<p><em><strong>Base case</strong></em>: On a list where <code>length l == 0</code>, i.e. <code>l = []</code>.</p>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">fmap id l <span class="fu">==</span> map id [] <span class="co">{- by expansion of fmap, l -}</span>
+          <span class="fu">==</span> []        <span class="co">{- by map (1) -}</span>
+          <span class="fu">==</span> id []     <span class="co">{- by definition of id -}</span></code></pre></div>
+<p><em><strong>Inductive hypothesis</strong></em>: Assume that <code>fmap id l’ == id l’</code> where <code>length l’ &lt; length l</code>. Since <code>l = x:xs</code> where <code>x</code> and <code>xs</code> are the head and tail of <code>l</code>, respectively, <code>fmap id xs == id xs</code> as <code>length xs &lt; length l</code>.</p>
+<p><em><strong>Inductive step</strong></em>:</p>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">fmap id l <span class="fu">==</span> map id (x<span class="fu">:</span>xs)     <span class="co">{- by expansion of fmap, l -}</span>
+          <span class="fu">==</span> id x <span class="fu">:</span> fmap id xs <span class="co">{- by map (2), defn. of fmap -}</span>
+          <span class="fu">==</span> id x <span class="fu">:</span> id xs      <span class="co">{- by inductive hypothesis -}</span>
+          <span class="fu">==</span> x<span class="fu">:</span>xs              <span class="co">{- by expansion of id -}</span>
+          <span class="fu">==</span> id l              <span class="co">{- by definition of id, l -}</span> ∎</code></pre></div>
+<h3 id="proof-of-the-second-law-1">Proof of the second law</h3>
+<p><strong>Claim</strong>: <em>On a list</em> <code>l</code>, <code>fmap (f . g) l == (fmap f . fmap g) l</code>.</p>
+<p><em>Proof</em>. By induction on the length of <code>l</code>.</p>
+<p><em><strong>Base case</strong></em>: On a list where <code>length l == 0</code> i.e. <code>l = []</code>.</p>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">fmap (f <span class="fu">.</span> g) l <span class="fu">==</span> map (f <span class="fu">.</span> g) []
+                      <span class="co">{- by expansion of fmap, l -}</span>
+               <span class="fu">==</span> []
+                      <span class="co">{- by map (1) -}</span></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">(fmap f <span class="fu">.</span> fmap g) l <span class="fu">==</span> map f (map g [])
+                           <span class="co">{- by expansion of (.), fmap, l -}</span>
+                    <span class="fu">==</span> map f []
+                           <span class="co">{- by map (1) -}</span>
+                    <span class="fu">==</span> []
+                           <span class="co">{- by map (1) -}</span></code></pre></div>
+<p><em><strong>Inductive hypothesis</strong></em>: Assume that <code>fmap (f . g) l’ == (fmap f . fmap g) l’</code> where <code>length l’ &lt; length l</code>. Since <code>l = x:xs</code> where <code>x</code> and <code>xs</code> are the head and tail of <code>l</code>, respectively, <code>fmap (f . g) xs == (fmap f . fmap g) xs</code> as <code>length xs &lt; length l</code>.</p>
+<p><em><strong>Inductive step</strong></em>:</p>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">fmap (f <span class="fu">.</span> g) l <span class="fu">==</span> map (f <span class="fu">.</span> g) (x<span class="fu">:</span>xs)
+                      <span class="co">{- by expansion of fmap, l -}</span>
+               <span class="fu">==</span> (f <span class="fu">.</span> g) x <span class="fu">:</span> fmap (f <span class="fu">.</span> g) xs
+                      <span class="co">{- by map (2), definition of fmap -}</span></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell">(fmap f <span class="fu">.</span> fmap g) l <span class="fu">==</span> map f (map g (x<span class="fu">:</span>xs))
+                           <span class="co">{- by expansion of (.), fmap, l -}</span>
+                    <span class="fu">==</span> map f (g x <span class="fu">:</span> map g xs)
+                           <span class="co">{- by map (2) -}</span>
+                    <span class="fu">==</span> f (g x) <span class="fu">:</span> map f (map g xs)
+                           <span class="co">{- by map (2) -}</span>
+                    <span class="fu">==</span> (f <span class="fu">.</span> g) x <span class="fu">:</span> fmap f (fmap g xs)
+                           <span class="co">{- by definition of (.), fmap -}</span>
+                    <span class="fu">==</span> (f <span class="fu">.</span> g) x <span class="fu">:</span> (fmap f <span class="fu">.</span> fmap g) xs
+                           <span class="co">{- by definition of (.) -}</span>
+                    <span class="fu">==</span> (f <span class="fu">.</span> g) x <span class="fu">:</span> fmap (f <span class="fu">.</span> g) xs
+                           <span class="co">{- by inductive hypothesis -}</span></code></pre></div>
+<p>Therefore, <code>fmap (f . g) l == (fmap f . fmap g) l</code> in all cases. ∎</p>
+<h3 id="was-it-all-for-naught">Was it all for naught?</h3>
+<p>Turns out these instances of <code>Functor</code> implement <code>fmap</code> correctly. However, turns out proving the second law in any case is redundant due to the <a href="https://www.fpcomplete.com/user/edwardk/snippets/fmap">free theorem of <code>fmap</code></a>, but it was fun anyways.</p>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    /* * * CONFIGURATION VARIABLES * * */
+    var disqus_shortname = 'ssomayyajula';
+    
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+
+        </div>
+        <div id="footer">
+            Site proudly generated by
+            <a href="http://jaspervdj.be/hakyll">Hakyll</a>
+        </div>
+    </body>
+</html>

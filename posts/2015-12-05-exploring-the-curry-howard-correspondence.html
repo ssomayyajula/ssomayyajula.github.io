@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <title>Exploring the Curry-Howard correspondence</title>
+        <link rel="stylesheet" type="text/css" href="../css/default.css" />
+        <link rel="stylesheet" type="text/css" href="../css/syntax.css" />
+        <link rel="shortcut icon" type="image/png" href="../images/haskell-logo.png" />
+        <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body>
+        <div id="header">
+            <div id="logo">
+                <a href="../">Siva Somayyajula</a>
+            </div>
+            <div id="navigation">
+                <a href="../files/resume.pdf">résumé</a>
+                <a href="mailto:sks266@cornell.edu">email</a>
+                <a href="https://github.com/ssomayyajula/">github</a>
+                <a href="https://www.linkedin.com/in/sivasomayyajula">linkedin</a>
+            </div>
+        </div>
+        <div id="content">
+            <h1>Exploring the Curry-Howard correspondence</h1>
+<div class="info">
+    Posted on December  5, 2015
+</div>
+<p>This topic has been treated by many great sources such as <a href="https://www.seas.upenn.edu/~cis194/hw/10-gadts.pdf">this</a> and <a href="http://www.seas.harvard.edu/courses/cs152/2015sp/lectures/lec15-curryhoward.pdf">that</a>, but I’d like to give my take on it. The Curry-Howard correspondence is a powerful idea that states that there exists an equivalence between programs and proofs. In other words, there is an isomorphism mapping programs to proofs, allowing us to find programs that represent proofs and vice versa by definition. This raises the question: how do we go about proving theorems with programs? We can start by finding the connection between propositional logic and functions.</p>
+<p><em>Types are formulas and programs are proofs</em>.</p>
+<p>Therefore, <em>a formula is valid iff there exists a function (program) with the corresponding type</em>.</p>
+<p>So how do we construct the correspondence between formulas and types? It’s not immediately apparent, but the big idea is that there exists a connection between validity and the <a href="https://codewords.recurse.com/issues/three/algebra-and-calculus-of-algebraic-data-types">inhabitants</a> of a type: the values it describes. Thus, we can use the following rule to define the relationship.</p>
+<p>A type <em>p</em> represents a valid formula iff it refers to an inhabitable type <code>p</code>.</p>
+<p>We can then define the correspondence between formulas constructed with logical connectives and types.</p>
+<ol style="list-style-type: decimal">
+<li><em>Falsities are</em> ⊥, corresponding to the uninhabited type.</li>
+<li><em>Negation is a function p →</em> ⊥ <em>on any input.</em> This allows us to take any valid formula (inhabitable type) and produce its negation: a falsity, or ⊥.</li>
+<li><em>Disjunctions are sum types/tagged unions.</em> <em>p</em> ∨ <em>q</em> can be represented by <code>Either p q</code>, which can take on values/inhabitants of either <code>Left p</code> or <code>Right q</code>, capturing the behavior of disjunctions.</li>
+<li><em>Conjunctions are product types.</em> Since the tuple <code>(p, q)</code> requires the presence of values from both types <code>p</code> and <code>q</code>, they describe conjunctions.</li>
+<li><em>Implications are abstractions.</em> A function <em>p → q</em> requires the presence of <em>p</em> for the presence of <em>q</em>, adequately describing conditionals.</li>
+</ol>
+<p>Note that some semantics of natural deduction, namely the rules of introduction that allow us to derive valid formulas, are encoded in the construction of these types. For example, introducing a conjunction between <em>p</em> and <em>q</em> requires both formulas to be valid. This is evident in the construction of <code>(p, q)</code>, which requires the presence of both types <em>p</em> and <em>q</em>. However, we would still need to manually prove rules of elimination, but those are trivial. For example, we can perform left and right elimination on a conjunction by extracting either element of the tuple and noting that they are present. Now, we can go straight to writing proofs of basic and derived argument forms. But first, let’s define some useful type synonyms corresponding to the above five rules.</p>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">{-# LANGUAGE TypeOperators #-}</span>
+<span class="kw">module</span> <span class="dt">NaturalDeduction</span> <span class="kw">where</span>
+
+<span class="kw">data</span> (⊥) <span class="co">-- no possible inhabitants</span>
+<span class="kw">type</span> (¬)p <span class="fu">=</span> p <span class="ot">-&gt;</span> (⊥)
+<span class="kw">type</span> (∧) <span class="fu">=</span> (,)
+<span class="kw">type</span> (∨) <span class="fu">=</span> <span class="dt">Either</span>
+<span class="kw">type</span> (<span class="ot">→</span>) <span class="fu">=</span> (<span class="ot">-&gt;</span>)</code></pre></div>
+<p>Let’s prove a few theorems. Consider the trivial <em>modus tollens</em>, which states that (<em>p</em> → <em>q</em>) ∧ ¬<em>q</em> → ¬<em>p</em>. The corresponding program in Haskell is the following.</p>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">modusTollens ::</span> (p <span class="ot">→</span> q) ∧ (¬)q <span class="ot">→</span> (¬)p
+modusTollens (φ, ψ) <span class="fu">=</span> ψ <span class="fu">.</span> φ</code></pre></div>
+<p>This reads a bit weird, but we’re essentially saying that given an inhabitant of <code>p</code>, we can derive a contradiction by producing an inhabitant of <code>q</code> by function application and stating not <code>q</code> at the same time. Since this is a well-typed and proper function, we have proven <em>modus tollens</em>.</p>
+<p>But what about something more fundamental, like the <em>law of the excluded middle</em>? Turns out, it is impossible to prove <em>axioms</em>, because they are, by definition, assumed to be true. To get around this, we can define an infinitely recursive function <code>true</code> such that we can assign any type to it. As a result, we can define laws and axioms as <code>true</code> so that their type signatures are proper, and therefore the formulas to which they correspond are valid.</p>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">true ::</span> truth
+true <span class="fu">=</span> true
+
+<span class="ot">exclMid ::</span> p ∨ (¬)p
+exclMid <span class="fu">=</span> true</code></pre></div>
+<p>This is of course not a carte blanche to mark theorems you are too lazy to prove as true, but a nice way of introducing axioms into the system.</p>
+<p>So let’s try something harder, like the <em>transposition theorem</em>: (<em>p</em> → <em>q</em>) ↔ (¬<em>q</em> → ¬<em>p</em>). Since this involves a biconditional, we can introduce this as a type synonym. Furthermore, the proof requires applications of <em>modus tollens</em> and <em>double negation</em>, allowing us to compose proofs based on previous proofs of theorems.</p>
+<div class="sourceCode"><pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">type</span> p ↔ q <span class="fu">=</span> (p <span class="ot">→</span> q) ∧ (q <span class="ot">→</span> p)
+
+<span class="ot">dblNeg ::</span> p ↔ (¬)((¬) p)
+dblNeg <span class="fu">=</span> (flip (<span class="fu">$</span>), true) <span class="co">-- ($) is actually modus ponens</span>
+
+<span class="ot">transposition ::</span> (p <span class="ot">→</span> q) ↔ ((¬)q <span class="ot">→</span> (¬)p)
+transposition <span class="fu">=</span>
+    (curry modusTollens, \c p <span class="ot">-&gt;</span> <span class="co">-- c = contrapositive</span>
+        undoDblNegate <span class="fu">$</span> curry modusTollens c <span class="fu">$</span> dblNegate p)
+            <span class="kw">where</span> (dblNegate, undoDblNegate) <span class="fu">=</span> dblNeg</code></pre></div>
+<p>Proving double negation works in the forward direction by applying negation then later undoing it by function application, but this cannot be done in the backwards direction since we can’t “undo” lambda abstraction. As a result, we have to let it be accepted as true. To prove transposition in the forward direction, we simply apply <em>modus tollens</em>. In the backwards direction, we must apply <em>modus tollens</em> to (¬<em>q</em> → ¬<em>p</em>) and the double negative of <em>p</em>, then undo the double negation to get the correct result.</p>
+<p>In short, we’ve effectively created a system to prove theorems (automated theorem provers, anyone?) by exploiting the Curry-Howard correspondence. The big takeaway is that we can prove theorems by encoding their logic in the type signatures of functions and can actually go about proving them by manipulating inhabitants. A gist of the source code can be found <a href="https://gist.github.com/sivawashere/dabeff9fed2ac8b68cc2">here</a>.</p>
+<p>P.S. <em>A great exercise would be to extend this system to accommodate universal quantification.</em></p>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    /* * * CONFIGURATION VARIABLES * * */
+    var disqus_shortname = 'ssomayyajula';
+    
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+
+        </div>
+        <div id="footer">
+            Site proudly generated by
+            <a href="http://jaspervdj.be/hakyll">Hakyll</a>
+        </div>
+    </body>
+</html>
